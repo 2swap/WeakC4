@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Graph Visualiser</title>
+    <style>
+        body,
+        a {
+          margin: 0;
+          padding: 0;
+          overflow: hidden;
+          top: 0;
+          left: 0;
+          bottom: 0;
+          right: 0;
+          font-family: 'Arial', sans-serif;
+          color: #bbf;
+          background-color: #000;
+        }
+        #info {
+          font-size: 14px;
+          color: #fff;
+          padding: 10px;
+          border-radius: 5px;
+          max-width: 410px;
+          position: fixed;
+          bottom: 10px;
+          left: 10px;
+          z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div style="position: relative;">
+        <div style="position: absolute; left: 0; top: 0; z-index: 1;">
+            <canvas id="graph"></canvas>
+        </div>
+        <div style="position: absolute; left: 0; top: 0; z-index: 1;">
+            <canvas id="board"></canvas>
+        </div>
+        <p id="info">
+            Controls
+            <br>
+            [U] to undo the last move
+            <br>
+            [R] to reset
+            <br>
+            [WASD] rotate graph
+            <br>
+            [arrows] to pan
+            <br>
+            [click] on a node!
+            <br>
+            <br>
+            This is a low-information, search-free weak solution of Connect-4.
+            With <nodes> nodes, it represents a small amount of information one may
+            'memorize' in order to always win, as player 1 (red).
+            Terminal nodes contain 'steady state diagrams', a language expressing
+            weak solutions of sufficiently developed positions.
+            <br>
+            <br>
+            <a href="explanation">Detailed Explanation</a>
+        </p>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script src="c4_full.js"></script>
+    <script src="client.js"></script>
+</body>
+</html>
