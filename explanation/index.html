@@ -52,7 +52,7 @@
         <p>WeakC4 is a <i>search-free, low-knowledge</i> solution to 7x6 Connect 4, constructed by identifying a language which describes perfect play for a small subset of nodes, and then identifying a small opening tree which contains only those nodes as leaves.</p>
         <p>This website provides a formal <i>strategy</i> for optimal first-player <a href="https://en.wikipedia.org/wiki/Connect_Four">Connect Four</a> play, which is fundamentally different from existing <a href="https://en.wikipedia.org/wiki/Solved_game">strong and weak solutions</a> such as <a href="https://tromp.github.io/c4/fhour.html">Fhourstones</a>:</p>
         <ul>
-            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/protobuf/c4_full.pb.gz">418 kilobytes</a>.</li>
+            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/protobuf/c4_full.pb.gz">372 kilobytes</a>.</li>
             <li>It uses no search during runtime, running at <i>O(wh)</i> time complexity to select a move.</li>
             <li>It can be visualized in its entirety and rendered in realtime.</li>
             <li>It visually illustrates and confirms the existence of particularly challenging openings, lines, and variations already known to connect 4 players.</li>
@@ -148,7 +148,7 @@
         <ul>
             <li>It uses no search during runtime, running at <i>O(wh)</i> time complexity to select a move at any valid position.</li>
             <li>It has been reduced to a total of about 20,000 nodes (subject to further reduction, see the graph page for a live count.) About two-thirds of these nodes are leaves representing steady states.</li>
-            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/protobuf/c4_full.pb.gz">418kb</a>.</li>
+            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/protobuf/c4_full.pb.gz">372 kilobytes</a>.</li>
             <li>This level of compression can be compared to <a href="https://tromp.github.io/c4/connect4_thesis.pdf">Allis (1988)</a>, who found an opening book of 500,000 nodes which permitted real-time play, but still invoked search.</li>
             <li>Both of these metrics could further be reduced by about half, as they included search and storage of mirror positions.</li>
             <li>Sooner or later, I will make an Anki opening deck using the discovered branches, so that humans who wish to attempt memorization can do so.</li>
