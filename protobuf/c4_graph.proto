@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+message NeighborData {
+  repeated uint32 neighbor_ids = 1;
+}
+
+message Node {
+  uint32 id = 1;
+
+  oneof node_content {
+    bytes flat_ss = 2; // 6x7/2 = 21 bytes representing character codes (2 symbols per byte)
+    NeighborData neighbor_data = 3;
+  }
+
+  bytes rep = 4; // Variable length list of column indices, from 1 to 7 inclusive
+}
+
+message Dataset {
+  repeated Node nodes = 1;
+  uint32 root_node_id = 2;
+}
