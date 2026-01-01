@@ -48,7 +48,6 @@ def build_dataset(js_path, out_path):
 
     # Enumerate all hashes
     hash_to_id = {h: i for i, h in enumerate(hash_list)}
-    id_to_hash = {i: h for h, i in hash_to_id.items()}  # optional, if you need to debug
 
     ds = c4_graph_pb2.Dataset()
     ds.root_node_id = hash_to_id[data["root_node_hash"]]

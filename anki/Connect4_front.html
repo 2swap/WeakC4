@@ -1,0 +1,86 @@
+<center>
+    <canvas id="canvas" width="350px" height="350px"></canvas>
+    <a href="" id="link"><h2 id="text"></h2></a>
+</center>
+
+
+
+<script>
+window.onload = function() {
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const w = 7;
+const h = 6;
+
+const back = document.getElementById('back') !== null;
+const link = document.getElementById('link');
+const text = document.getElementById('text');
+
+const rawSetup = "{{Setup}}";
+const rawMove = "{{Move}}";
+
+const positionBase = rawSetup.startsWith('(') ? '43' : rawSetup;
+const solution = rawMove.startsWith('(') ? '6' : rawMove;
+const position = back ? (positionBase + solution) : positionBase;
+
+const EMPTY  = '#025';
+const RED    = '#800';
+const YELLOW = '#880';
+
+ctx.textAlign = 'center';
+ctx.font = '48px Arial';
+
+const grid = Array.from({ length: h }, () => Array.from({ length: w }, () => EMPTY));
+
+link.href = 'https://connect4.gamesolver.org/?pos=' + position;
+text.textContent = 'link to position';
+
+const isCellEmpty = (row, col) => {
+    return grid[row][col] === EMPTY;
+};
+
+const move = (x, col) => {
+    for (let y = 0; y < h; y++) {
+        if (isCellEmpty(y, x)) {
+            grid[y][x] = col;
+            return y;
+        }
+    }
+    return -1;
+};
+
+const populateGrid = () => {
+    let col = RED;
+    for (let i = 0; i < position.length; i++) {
+        const x = parseInt(position[i]) - 1;
+        move(x, col);
+        col = (col === RED) ? YELLOW : RED;
+    }
+};
+
+const drawStone = (xCoord, yCoord, color) => {
+    const stoneRadius = 20;
+    const x = (xCoord + 0.5) * 50;
+    const y = (h - yCoord - 0.5) * 50;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, stoneRadius, 0, 2 * Math.PI, false);
+    ctx.fill();
+};
+
+const render = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const color = grid[y][x];
+            drawStone(x, y, color);
+        }
+    }
+};
+
+populateGrid();
+render();
+
+};
+</script>
