@@ -4,6 +4,33 @@ import requests
 import re
 from pathlib import Path
 
+prefix_list = {
+    "02. 6-1": ["444444"],
+    "436766": ["436766"],
+    "4367": ["4367"],
+    "47": ["47"],
+    "426566": ["426566"],
+    "426564": ["426564"],
+    "05. 4444452": ["4444452", "4445244", "4524444"],
+    "03. True Candlesticks": ["44444222266", "44444226622"],
+    "04. Half Candlesticks": ["444442222"],
+    "Crown Variations": ["44444"],
+    "D3-D4 Openings": ["4442", "4441"],
+    "Hand Variations": ["4366755535", "4365567535"],
+    "Thumb Variations": ["436556766"],
+    "Wrist Variations": ["44436675", "452332144", "43644675"],
+    "Palm Variations": ["4365567"],
+    "444367": ["444367", "436447"],
+    "44436(1/2/3)": ["444361", "444362", "444363", "436441", "436442", "436443"],
+    "4621": ["4621"],
+    "Other 462 Variations": ["462"],
+    "436(1/2)": ["4361", "4362"],
+    "4363": ["4363"],
+    "Hills Openings": ["4443655", "4364455", "4365544", "436553", "436555", "452337"],
+    "01. Very Beginning": [""],
+}
+deck_name = "2swap's Connect 4"
+
 def anki_connect(action, params={}):
     try:
         if params is None:
@@ -17,14 +44,12 @@ def anki_connect(action, params={}):
     except requests.ConnectionError:
         print("AnkiConnect is not running. Please turn it on.")
 
-def create_anki_deck():
-    deck_name = "2swap's Connect 4"
-    resp_json = anki_connect("createDeck", { "deck": deck_name } )
-    return deck_name
+def create_anki_deck(deck):
+    resp_json = anki_connect("createDeck", { "deck": deck } )
 
-def anki_add_note(setup, move):
+def anki_add_note(deck, setup, move):
     notes = [{
-        "deckName": "2swap's Connect 4",
+        "deckName": deck,
         "modelName": "Connect4",
         "fields": {
             "Setup": setup,
@@ -63,6 +88,19 @@ def find_move(setup, neighbor_rep):
     assert(move is not None)
     return move
 
+def invert_around_4(setup):
+    inverted = ""
+    for c in setup:
+        inverted += str(8 - int(c))
+    return inverted
+
+def determine_prefix(setup):
+    for prefix, opening in prefix_list.items():
+        for o in opening:
+            if setup.startswith(o) or setup.startswith(invert_around_4(o)):
+                return prefix
+    return None
+
 def build_dataset(js_path):
     print(f"Reading: {js_path}")
     text = Path(js_path).read_text()
@@ -74,6 +112,10 @@ def build_dataset(js_path):
     # then sort the cards lexicographically, then add to Anki.
     cards = []
 
+    # Count of matched setups per prefix, or "None" for unmatched setups
+    prefix_counts = { prefix: 0 for prefix in prefix_list.keys() }
+    prefix_counts[None] = 0
+
     # Populate cards
     for h, node_json in node_map.items():
         # Only for red-to-move nodes
@@ -82,19 +124,28 @@ def build_dataset(js_path):
             assert(len(node_json["neighbors"]) == 1)
             setup = node_json["rep"]
 
+            prefix = determine_prefix(setup)
             neighbor_hash = node_json["neighbors"][0]
             neighbor_rep = node_map[neighbor_hash]["rep"]
             move = find_move(setup, neighbor_rep)
-            cards.append( (setup, move) )
+            deck = deck_name + ("" if prefix is None else f"::{prefix}")
+            cards.append( (deck, setup, move) )
+            prefix_counts[prefix] += 1
+            if(prefix is None):
+                print(f"No prefix found for setup {setup}")
+
+    for prefix, count in prefix_counts.items():
+        print(f"Prefix: {prefix}, Count: {count}")
 
     # Sort cards lexicographically by setup
     cards.sort( key=lambda x: x[0] )
 
     # Add cards to Anki
-    for setup, move in cards:
-        anki_add_note("nextmove:" + setup, move)
+    for deck, setup, move in cards:
+        anki_add_note(deck, "nextmove:" + setup, move)
 
     print(f"Added {len(cards)} cards to Anki.")
 
-create_anki_deck()
+for prefix in prefix_list.keys():
+    create_anki_deck(deck_name + "::" + prefix)
 build_dataset("../c4_full.js")
