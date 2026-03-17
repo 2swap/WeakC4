@@ -12,13 +12,12 @@ let board_arr = 0;
 var square_sz = 40;
 var extraMoves = "";
 
-function get_hash() {
+function hash_a_board(board_to_hash) {
     let a = 1;
     let semihash = 0;
-
     for (let i = 0; i < dataset.board_h; i++) {
         for (let j = 0; j < dataset.board_w; j++) {
-            semihash += board_arr[dataset.board_h-1-i][j] * a;
+            semihash += board_to_hash[dataset.board_h-1-i][j] * a;
             a *= 1.021813947;
         }
     }
@@ -35,14 +34,8 @@ function get_hash() {
     return closename;
 }
 
-function render_board () {
-    boardcanvas.width = parseInt(dataset.board_w) * square_sz;
-    boardcanvas.height = parseInt(dataset.board_h) * square_sz + 54;
-    boardctx.font = "24px Arial";
-    boardctx.textAlign = "center";
-    board_arr = [];
-
-    // Initialize the board array
+function construct_board_arr(board_string) {
+    let board_arr = [];
     for (let y = 0; y < 6; y++) {
         board_arr[y] = [];
         for (let x = 0; x < 7; x++) {
@@ -50,8 +43,6 @@ function render_board () {
         }
     }
 
-    var board_string = repstr();
-    console.log("Board string: " + board_string + ", hash: " + hash);
     for (var i = 0; i < board_string.length; i++) {
         var x = String.fromCharCode(board_string.charCodeAt(i)) - 1;
 
@@ -63,6 +54,16 @@ function render_board () {
             }
         }
     }
+
+    return board_arr;
+}
+
+function render_board () {
+    boardcanvas.width = parseInt(dataset.board_w) * square_sz;
+    boardcanvas.height = parseInt(dataset.board_h) * square_sz + 80;
+    boardctx.font = "24px Arial";
+    boardctx.textAlign = "center";
+    board_arr = construct_board_arr(repstr());
 
     // Detect winning lines
     const winningLine = checkForWin(board_arr);
@@ -77,12 +78,14 @@ function render_board () {
     boardctx.font = "15px Arial";
     boardctx.textAlign = "left";
     boardctx.fillStyle = "white";
+    var dy = 0;
+    opening = nodes[hash].prefix;
+    boardctx.fillText("Opening name: " + opening, 8, (dy+=16)+square_sz * dataset.board_h);
     if(winningLine)
-        boardctx.fillText("Press 'r' to reset!", 8, 16+square_sz * dataset.board_h);
-    else if(extraMoves == "")
-        boardctx.fillText("Click to play against the weak solution!", 8, 16+square_sz * dataset.board_h);
-    else {
-        var dy = 0;
+        boardctx.fillText("Press 'r' to reset!", 8, (dy+=16)+square_sz * dataset.board_h);
+    else if(extraMoves == "") {
+        boardctx.fillText("Click to play against the weak solution!", 8, (dy+=16)+square_sz * dataset.board_h);
+    } else {
         boardctx.fillText("This is a Steady State Diagram,"  , 8, (dy+=16)+square_sz * dataset.board_h);
         boardctx.fillText("which instructs the agent to play", 8, (dy+=16)+square_sz * dataset.board_h);
         boardctx.fillText("perfectly from here on."          , 8, (dy+=16)+square_sz * dataset.board_h);
@@ -115,6 +118,18 @@ function drawStone(x, y, col, winningLine) {
     if (ss !== '1' && ss !== '2') {
         boardctx.fillText(ss, px, py + 9);
     }
+}
+
+// Return true if Board equals subBoard in all non-zero positions
+function isSubBoard(superBoard, subBoard) {
+    for (let y = 0; y < 6; y++) {
+        for (let x = 0; x < 7; x++) {
+            if (subBoard[y][x] !== 0 && superBoard[y][x] !== subBoard[y][x]) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 // Helper function to check for a win
@@ -172,7 +187,7 @@ function handleClick(event) {
 
 function makeMoveAsRed(){
     if(repstr().length%2 == 1) return;
-    var thishash = get_hash();
+    var thishash = hash_a_board(board_arr);
     if(nodes[thishash] && nodes[thishash].neighbors){
         for(var neighbor_id in nodes[thishash].neighbors){
             var neighbor_hash = nodes[thishash].neighbors[neighbor_id];
@@ -348,7 +363,7 @@ function makeMoveAsYellow(column) {
         if(y == 5) return false;
     }
     hash_stack.push({"hash": hash, "extra": extraMoves});
-    newhash = get_hash();
+    newhash = hash_a_board(board_arr);
     if (newhash != -1) {
         hash = newhash;
         extraMoves = "";
@@ -360,10 +375,13 @@ function makeMoveAsYellow(column) {
     update_opacity();
     makeMoveAsRed();
     return newhash != -1;
-}var nodes_to_use = false;
+}
+
+var nodes_to_use = false;
 let nodes = false;
 var hash = 0;
 var hash_stack = 0;
+var openings_on = false;
 
 const boardctx = boardcanvas.getContext(`2d`);
 
@@ -374,6 +392,111 @@ let board_click_square = ';';
 
 on_board_change = function(){};
 
+const prefixList = [
+    {"Two-bar": ["436766"]},
+    {"Bent two-bar": ["436761663"]},
+    {"Short Cup Opening": ["46213522"]},
+    {"Tall Cup Opening": ["46213524224"]},
+    {"No Cup Opening": ["46213523"]},
+    {"6-1": ["4444445"]},
+    {"47": ["47"]},
+    {"426566": ["426566"]},
+    {"426564": ["426564"]},
+    {"Shoulder Spike": ["44444521", "44444524"]},
+    {"4444452": ["4444452"]},
+    {"True Candlesticks": ["44444222266"]},
+    {"Half Candlesticks": ["444442222", "444446622"]},
+    {"Crown Variations": ["44444"]},
+    {"D3-D4 Openings": ["4442", "4441"]},
+    {"4363": ["4363"]},
+    {"Fist Variations": ["4366755535"]},
+    {"Palm Variations": ["436556766"]},
+    {"4366": ["4366"]},
+    {"Triline": ["4623272", "4623262"]},
+    {"Other 4367 Lines": ["4367"]},
+    {"3-2": ["4443673", "4443613"]},
+    {"Two-holes": ["4361"]},
+    {"Other 462 Lines": ["462"]},
+    {"Hills Opening": ["4443655", "4364455", "4365", "452443"]},
+    {"Very Beginning": [""]}
+]
+
+// optional color mapping
+var prefixColors = { };
+// Make color mapping for each prefix, using a hash function to generate a color from the prefix string
+for (const dict of prefixList) {
+    const pref = Object.keys(dict)[0];
+    let hash = 0;
+    for (let i = 0; i < pref.length; i++) {
+        hash = pref.charCodeAt(i) + (hash << 4);
+        // Modulus by a large prime
+        hash %= 100007;
+    }
+    hash = hash << 5;
+    const color = `hsl(${hash % 359}, ${20 + (hash % 71)}%, ${30 + (hash % 53)}%)`;
+    prefixColors[pref] = color;
+}
+
+function sum_digits(str) {
+    let sum = 0;
+    for (let char of str) {
+        sum += char.charCodeAt(0) - '0'.charCodeAt(0);
+    }
+    return sum;
+}
+
+// Used in the console to populate the anki deck's practice section
+function get_one_opening_per_leaf(){
+    var leaves = {};
+    var num_leaves_left = 0;
+    for (const name in nodes) {
+        if(nodes[name].neighbors == null || Object.keys(nodes[name].neighbors).length == 0){
+            leaves[name] = 0;
+            num_leaves_left++;
+        }
+    }
+
+    console.log("There are " + num_leaves_left + " leaves in the graph. Getting one opening per leaf...");
+
+    openings = [];
+    while (num_leaves_left > 100) {
+        // Randomly make moves until arriving at a leaf.
+        // If the leaf's opening is already in the list, discard and try again, otherwise add it to the list.
+        var hash_here = dataset.root_node_hash;
+        var appendy_string = "";
+        var digitsum = 0;
+        while (nodes[hash_here].neighbors != null && Object.keys(nodes[hash_here].neighbors).length > 0) {
+            var neighbor_names = nodes[hash_here].neighbors;
+            var random_neighbor_name = neighbor_names[Math.floor(Math.random() * neighbor_names.length)];
+            var new_sum = sum_digits(nodes[random_neighbor_name].rep);
+            var char_to_append = String.fromCharCode((new_sum - digitsum) + '0'.charCodeAt(0));
+            appendy_string += char_to_append;
+            hash_here = random_neighbor_name;
+            digitsum = new_sum;
+        }
+        if(typeof leaves[hash_here] != "undefined"){
+            if(leaves[hash_here] == 0){
+                leaves[hash_here] = 1;
+                num_leaves_left--;
+                openings.push(appendy_string);
+                console.log("There are " + num_leaves_left + " leaves left. Got opening: " + appendy_string);
+            }
+        }
+        else {
+            console.log("Error: reached a leaf that is not in the list of leaves. This should never happen.");
+        }
+    }
+    return openings;
+}
+
+function invert_around_4(str) {
+    let result = "";
+    for (let char of str) {
+        const invertedDigit = 8 - (char.charCodeAt(0) - '0'.charCodeAt(0));
+        result += String.fromCharCode(invertedDigit + '0'.charCodeAt(0));
+    }
+    return result;
+}
 
 $(document).ready(async function() {
     if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
@@ -424,6 +547,7 @@ $(document).ready(async function() {
         resizePointCloud();
 
         function resizePointCloud() {
+            nodes = {};
             var sqrtwh = Math.sqrt(w * h);
             var min_x = Number.POSITIVE_INFINITY;
             var max_x = Number.NEGATIVE_INFINITY;
@@ -450,7 +574,7 @@ $(document).ready(async function() {
 
             // Calculate the scale factor
             var max_dimension = Math.max(max_x - min_x, max_y - min_y, max_z - min_z);
-            var scale_factor = (sqrtwh / 2) / max_dimension;
+            var scale_factor = sqrtwh * .5 / max_dimension;
 
             // Apply the transformation to each node
             for (const name in nodes_to_use) {
@@ -460,7 +584,31 @@ $(document).ready(async function() {
                 node.z = (node.z - center_z) * scale_factor;
                 node.opacity = 1;
                 nodes[name] = node;
-                delete nodes_to_use[name];
+            }
+
+            // Set a "prefix" property for each node based on the opening it belongs to upfront
+            // Flood-fill algorithm
+            for (const dict of prefixList) {
+                const pref = Object.keys(dict)[0];
+                const sequence_list = dict[pref];
+                for (const prefix_half of sequence_list) {
+                    const norm_and_inv = [prefix_half, invert_around_4(prefix_half)];
+                    for(const prefix of norm_and_inv) {
+                        const hash_of_prefix = hash_a_board(construct_board_arr(prefix));
+                        var stack = [hash_of_prefix];
+                        while (stack.length > 0) {
+                            let current = stack.pop();
+                            if(typeof nodes[current] == "undefined") continue;
+                            if(nodes[current].prefix) continue;
+                            nodes[current].prefix = pref;
+                            dataset.nodes_to_use[current].prefix = pref;
+                            if (!nodes[current].neighbors) continue;
+                            for (const neighbor_name of nodes[current].neighbors) {
+                                stack.push(neighbor_name);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -487,13 +635,17 @@ $(document).ready(async function() {
                     const neighbor = nodes[neighbor_name];
                     if(typeof neighbor == "undefined") continue;
                     if(name < neighbor_name && (neighbor.neighbors != null && name in neighbor.neighbors)) continue;
-                    graphctx.globalAlpha = node.opacity * neighbor.opacity;
+                    graphctx.globalAlpha = openings_on?0.2:(node.opacity * neighbor.opacity);
                     graphctx.strokeStyle = get_color(name, neighbor_name);
                     graphctx.beginPath();
                     graphctx.moveTo(node.screen_x, node.screen_y);
                     graphctx.lineTo(neighbor.screen_x, neighbor.screen_y);
                     graphctx.stroke();
                     graphctx.globalAlpha = 1;
+                }
+                if(openings_on && (nodes[hash].rep.length < 2 || node.prefix == nodes[hash].prefix)){
+                    graphctx.fillStyle = prefixColors[node.prefix];
+                    graphctx.fillRect(node.screen_x-1, node.screen_y-1, 3, 3);
                 }
             }
             graphctx.strokeStyle = `white`;
@@ -574,6 +726,7 @@ $(document).ready(async function() {
             if (ch == 'D') alpha += .04;
             if (ch == 'S') beta -= .04;
             if (ch == 'W') beta += .04;
+            if (ch == 'O') openings_on = !openings_on;
             if (ch == 'U') {
                 if(hash_stack.length > 1) {
                     let obj = hash_stack.pop();

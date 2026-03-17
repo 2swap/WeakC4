@@ -1,6 +1,7 @@
 <div class="front" id="front">
     <canvas id="canvas" width="350px" height="350px"></canvas>
-    <a href="" id="link"><h4 id="text"><u>link to position</u></h4></a>
+    <h4 id="text"></h4>
+    <a href="" id="link">Strong Solver Link</a>
 </div>
 
 <script>
@@ -16,17 +17,26 @@ var back = document.getElementById('back');
 var rawSetup = "{{Setup}}";
 var rawMove = "{{Move}}";
 
-var position = "43";
-var cardtype = "nextmove:";
+var position = "4367664";
+var cardtype = "practice:";
 if(!rawSetup.startsWith('(')) {
-    // rawSetup field looks something like: "nextmove:43"
-    // Parse out the position and the prefix before and after the colon.
+    // Setup field looks something like: "learn:43" or "practice:4367664"
+    // Parse out the position/sequence and the prefix before and after the colon.
     var colonIndex = rawSetup.indexOf(':');
     position = rawSetup.substring(colonIndex + 1);
     cardtype = rawSetup.substring(0, colonIndex + 1);
 }
 var solution = rawMove.startsWith('(') ? '6' : rawMove;
 if(back) position += solution;
+
+var mode = cardtype.replace(':', ''); // e.g., "learn" or "practice"
+var seq = null;
+if(mode === 'practice') {
+    // In practice mode, the setup is a sequence of moves to be played out:
+    // the player will play the first-player moves and the computer the second-player moves.
+    seq = position;
+    position = ""; // start with an empty board for practice
+}
 
 var EMPTY  = '#669';
 var RED    = '#f00';
@@ -37,8 +47,17 @@ ctx.font = '48px Arial';
 
 var grid = Array.from({ length: h }, () => Array.from({ length: w }, () => EMPTY));
 
-link.href = 'https://connect4.gamesolver.org/?pos=' + position;
-text.textContent = 'link to position';
+if(mode === 'practice') {
+    if(back) link.href = 'https://connect4.gamesolver.org/?pos=' + seq;
+    text.textContent = 'Play!';
+} else {
+    if(back) link.href = 'https://connect4.gamesolver.org/?pos=' + position;
+    text.textContent = 'Pick the best next move!';
+}
+
+// Don't show the solution link before flipping card
+if(!back) link.style.display = 'none';
+if(back) text.textContent = "";
 
 var isCellEmpty = (row, col) => {
     return grid[row][col] === EMPTY;
@@ -50,6 +69,13 @@ var move = (x, col) => {
             grid[y][x] = col;
             return y;
         }
+    }
+    return -1;
+};
+
+var getNextEmptyRow = (x) => {
+    for (let y = 0; y < h; y++) {
+        if (isCellEmpty(y, x)) return y;
     }
     return -1;
 };
@@ -73,7 +99,21 @@ var drawStone = (xCoord, yCoord, color) => {
     ctx.fill();
 };
 
+var hoverCol = -1;
+var seqIndex = 0;
+
+var flash = (color) => {
+    var el = document.body;
+    var previous = el.style.backgroundColor || '';
+    el.style.transition = 'background-color 100ms';
+    el.style.backgroundColor = color;
+    setTimeout(function() {
+        el.style.backgroundColor = previous;
+    }, 300);
+};
+
 var render = () => {
+    var canvas = document.getElementById('canvas');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
@@ -81,8 +121,94 @@ var render = () => {
             drawStone(x, y, color);
         }
     }
+    // Hover effect only in practice mode and when it's the player's turn
+    if(mode === 'practice' && hoverCol >= 0 && seqIndex < seq.length && seqIndex % 2 === 0) {
+        var yRow = getNextEmptyRow(hoverCol);
+        if(yRow !== -1) {
+            ctx.globalAlpha = 0.2;
+            drawStone(hoverCol, yRow, RED);
+            ctx.globalAlpha = 1.0;
+        }
+    }
 };
 
-populateGrid();
-render();
+if(mode !== 'practice') {
+    populateGrid();
+    render();
+} else {
+    // Practice interactive mode:
+    // seq contains the full move sequence; player clicks to play the first-player moves (even indices),
+    // computer automatically plays the following second-player move (odd indices).
+    seqIndex = 0;
+    render();
+
+    var canvasEl = document.getElementById('canvas');
+
+    canvasEl.addEventListener('mousemove', function(e) {
+        if(mode !== 'practice') return;
+        if(seqIndex >= seq.length) {
+            hoverCol = -1;
+            render();
+            return;
+        }
+        // only show hover on player's turn (even indices)
+        if(seqIndex % 2 !== 0) {
+            hoverCol = -1;
+            render();
+            return;
+        }
+        var rect = canvasEl.getBoundingClientRect();
+        var xPixel = e.clientX - rect.left;
+        var colIndex = Math.floor(xPixel / 50);
+        if(colIndex < 0 || colIndex >= w) {
+            hoverCol = -1;
+        } else {
+            hoverCol = colIndex;
+        }
+        render();
+    });
+
+    canvasEl.addEventListener('mouseout', function() {
+        if(mode !== 'practice') return;
+        hoverCol = -1;
+        render();
+    });
+
+    canvasEl.addEventListener('click', function(e) {
+        if(mode !== 'practice') return;
+        if(seqIndex >= seq.length) return;
+        // only allow click on player's turn
+        if(seqIndex % 2 !== 0) return;
+        var rect = canvasEl.getBoundingClientRect();
+        var xPixel = e.clientX - rect.left;
+        var colIndex = Math.floor(xPixel / 50);
+        if(colIndex < 0 || colIndex >= w) return;
+        var expectedCol = parseInt(seq[seqIndex]) - 1;
+        if(colIndex !== expectedCol) {
+            // wrong move: brief flash
+            flash('rgba(255,127,127,0.2)');
+            return;
+        }
+        // player's move
+        var yplayed = move(colIndex, RED);
+        if(yplayed === -1) {
+            flash('rgba(255,127,127,0.2)');
+            return;
+        }
+        seqIndex++;
+        // computer move if available
+        if(seqIndex < seq.length) {
+            var compCol = parseInt(seq[seqIndex]) - 1;
+            move(compCol, YELLOW);
+            seqIndex++;
+        }
+        hoverCol = -1;
+        render();
+        if(seqIndex >= seq.length) {
+            // success flash
+            flash('rgba(127,255,127,0.2)');
+            text.textContent = 'Well done!';
+        }
+    });
+}
 </script>
