@@ -1,4 +1,12 @@
 const boardcanvas = document.getElementById(`board`);
+const graphcanvas = document.getElementById(`graph`);
+const boardctx = boardcanvas.getContext(`2d`);
+const graphctx = graphcanvas.getContext(`2d`);
+const w = graphcanvas.width = window.innerWidth;
+const h = graphcanvas.height = window.innerHeight;
+// Loading message while the data is being fetched and processed
+document.getElementById("loading-message").style.display = "block";
+
 var EMPTY       = "#049";
 var RED         = "#f00";
 var YELLOW      = "#ff0";
@@ -383,7 +391,6 @@ var hash = 0;
 var hash_stack = 0;
 var openings_on = false;
 
-const boardctx = boardcanvas.getContext(`2d`);
 
 let boardbutton = false;
 let board_click_start = {x:0,y:0};
@@ -421,6 +428,42 @@ const prefixList = [
     {"Very Beginning": [""]}
 ]
 
+// Set the prefix for each node based on the prefixList
+function set_one_prefix(dict) {
+    const pref = Object.keys(dict)[0];
+    const sequence_list = dict[pref];
+    for (const prefix_half of sequence_list) {
+        const norm_and_inv = [prefix_half, invert_around_4(prefix_half)];
+        for(const prefix of norm_and_inv) {
+            const hash_of_prefix = hash_a_board(construct_board_arr(prefix));
+            var stack = [hash_of_prefix];
+            while (stack.length > 0) {
+                let current = stack.pop();
+                if(typeof nodes[current] == "undefined") continue;
+                if(nodes[current].prefix) continue;
+                nodes[current].prefix = pref;
+                if (!nodes[current].neighbors) continue;
+                for (const neighbor_name of nodes[current].neighbors) {
+                    if(!nodes[neighbor_name].prefix)
+                    stack.push(neighbor_name);
+                }
+            }
+        }
+    }
+}
+
+function set_prefixes() {
+    for (const dict of prefixList) {
+        set_one_prefix(dict);
+    }
+
+    // Copy prefixes onto dataset
+    for (const name in nodes) {
+        dataset.nodes_to_use[name].prefix = nodes[name].prefix;
+    }
+    document.getElementById("loading-message").style.display = "none";
+}
+
 // optional color mapping
 var prefixColors = { };
 // Make color mapping for each prefix, using a hash function to generate a color from the prefix string
@@ -447,10 +490,20 @@ function sum_digits(str) {
 
 // Used in the console to populate the anki deck's practice section
 function get_one_opening_per_leaf(){
+    // Here, by leaf, we mean red nodes for whom all neighbors are terminal.
     var leaves = {};
     var num_leaves_left = 0;
     for (const name in nodes) {
-        if(nodes[name].neighbors == null || Object.keys(nodes[name].neighbors).length == 0){
+        // If this is red-to-play (even-length rep), skip
+        if (nodes[name].rep.length % 2 === 0) continue;
+        var is_leaf = true;
+        for (const neighbor of nodes[name].neighbors) {
+            if (nodes[neighbor].neighbors != null && Object.keys(nodes[neighbor].neighbors).length > 0) {
+                is_leaf = false;
+                break;
+            }
+        }
+        if (is_leaf) {
             leaves[name] = 0;
             num_leaves_left++;
         }
@@ -459,13 +512,16 @@ function get_one_opening_per_leaf(){
     console.log("There are " + num_leaves_left + " leaves in the graph. Getting one opening per leaf...");
 
     openings = [];
-    while (num_leaves_left > 100) {
+    while (num_leaves_left > 0) {
         // Randomly make moves until arriving at a leaf.
         // If the leaf's opening is already in the list, discard and try again, otherwise add it to the list.
         var hash_here = dataset.root_node_hash;
         var appendy_string = "";
         var digitsum = 0;
         while (nodes[hash_here].neighbors != null && Object.keys(nodes[hash_here].neighbors).length > 0) {
+            const last_hash = hash_here;
+            const last_digitsum = digitsum;
+            const last_appendy_string = appendy_string;
             var neighbor_names = nodes[hash_here].neighbors;
             var random_neighbor_name = neighbor_names[Math.floor(Math.random() * neighbor_names.length)];
             var new_sum = sum_digits(nodes[random_neighbor_name].rep);
@@ -473,17 +529,23 @@ function get_one_opening_per_leaf(){
             appendy_string += char_to_append;
             hash_here = random_neighbor_name;
             digitsum = new_sum;
-        }
-        if(typeof leaves[hash_here] != "undefined"){
-            if(leaves[hash_here] == 0){
+
+            // If we have hit a leaf
+            if(leaves[hash_here] === 0){
                 leaves[hash_here] = 1;
                 num_leaves_left--;
                 openings.push(appendy_string);
                 console.log("There are " + num_leaves_left + " leaves left. Got opening: " + appendy_string);
+                break;
             }
-        }
-        else {
-            console.log("Error: reached a leaf that is not in the list of leaves. This should never happen.");
+            // If we have already got an opening from this leaf, restart
+            else if(leaves[hash_here] === 1) break;
+            // If there are no neighbors from here, undo the last move
+            else if(nodes[hash_here].neighbors == null || Object.keys(nodes[hash_here].neighbors).length == 0){
+                hash_here = last_hash;
+                digitsum = last_digitsum;
+                appendy_string = last_appendy_string;
+            }
         }
     }
     return openings;
@@ -523,11 +585,6 @@ $(document).ready(async function() {
 
     try {
         nodes_to_use = dataset.nodes_to_use;
-
-        const graphcanvas = document.getElementById(`graph`);
-        const w = graphcanvas.width = window.innerWidth;
-        const h = graphcanvas.height = window.innerHeight;
-        const graphctx = graphcanvas.getContext(`2d`);
 
         let tick = 0;
         let ox = 0; let oy = 100; let zoom = 1;
@@ -586,30 +643,7 @@ $(document).ready(async function() {
                 nodes[name] = node;
             }
 
-            // Set a "prefix" property for each node based on the opening it belongs to upfront
-            // Flood-fill algorithm
-            for (const dict of prefixList) {
-                const pref = Object.keys(dict)[0];
-                const sequence_list = dict[pref];
-                for (const prefix_half of sequence_list) {
-                    const norm_and_inv = [prefix_half, invert_around_4(prefix_half)];
-                    for(const prefix of norm_and_inv) {
-                        const hash_of_prefix = hash_a_board(construct_board_arr(prefix));
-                        var stack = [hash_of_prefix];
-                        while (stack.length > 0) {
-                            let current = stack.pop();
-                            if(typeof nodes[current] == "undefined") continue;
-                            if(nodes[current].prefix) continue;
-                            nodes[current].prefix = pref;
-                            dataset.nodes_to_use[current].prefix = pref;
-                            if (!nodes[current].neighbors) continue;
-                            for (const neighbor_name of nodes[current].neighbors) {
-                                stack.push(neighbor_name);
-                            }
-                        }
-                    }
-                }
-            }
+            // Call set_prefixes_async asynchronously
         }
 
         function render_blurb(){
@@ -667,6 +701,7 @@ $(document).ready(async function() {
 
             render_graph();
             render_blurb();
+            document.getElementById("strongsolver").href = "https://connect4.gamesolver.org/?pos=" + nodes[hash].rep;
         }
 
         function get_node_coordinates (hash) {
@@ -745,8 +780,23 @@ $(document).ready(async function() {
         on_board_change = function(){
             render();
             render_board();
+            console.log(hash + " / " + nodes[hash].rep);
+            // Insert pos= into the URL for easy sharing
+            const url = new URL(window.location);
+            url.searchParams.set('pos', nodes[hash].rep);
+            window.history.pushState({}, '', url);
         }
 
+        set_prefixes();
+
+        // If the user uses a URL ending in ?pos=4366, find url_pos = 4366
+        var urlParams = new URLSearchParams(window.location.search);
+        var url_pos = urlParams.get('pos');
+        if(url_pos) {
+            hash = hash_a_board(construct_board_arr(url_pos));
+            extraMoves = "";
+        }
+        update_opacity();
         on_board_change();
 
     } catch (error) {

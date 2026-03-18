@@ -6,7 +6,7 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Graph Visualiser</title>
+    <title>Connect-4 Solution</title>
     <style>
         body,
         a {
@@ -36,6 +36,9 @@
 </head>
 <body>
     <div style="position: relative;">
+        <div id="loading-message" style="position: absolute; left: 0; top: 0; z-index: 1; font-size: 72px; color: #fff; padding: 20px;">
+            Loading...
+        </div>
         <div style="position: absolute; left: 0; top: 0; z-index: 1;">
             <canvas id="graph"></canvas>
         </div>
@@ -66,6 +69,10 @@
             <br>
             <br>
             <a href="explanation">Detailed Explanation</a>
+            <br>
+            <a href="https://ankiweb.net/shared/info/1778899069?cb=1773723514336">Memorize it with Anki</a>
+            <br>
+            <a id="strongsolver" target="_blank" href="https://connect4.gamesolver.org/?pos=">Strong Solution for this position</a>
         </p>
     </div>
 
