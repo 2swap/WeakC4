@@ -794,6 +794,7 @@ $(document).ready(async function() {
         var url_pos = urlParams.get('pos');
         if(url_pos) {
             hash = hash_a_board(construct_board_arr(url_pos));
+            if(hash == -1) hash = 0;
             extraMoves = "";
         }
         update_opacity();

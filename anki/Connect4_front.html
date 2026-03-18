@@ -1,7 +1,7 @@
 <div class="front" id="front">
     <canvas id="canvas" width="350px" height="350px"></canvas>
     <h4 id="text"></h4>
-    <a href="" id="link">Strong Solver Link</a>
+    <a href="" id="link">View Solution Graph</a>
 </div>
 
 <script>
@@ -35,7 +35,7 @@ if(mode === 'practice') {
     // In practice mode, the setup is a sequence of moves to be played out:
     // the player will play the first-player moves and the computer the second-player moves.
     seq = position;
-    position = ""; // start with an empty board for practice
+    if(!back) position = "";
 }
 
 var EMPTY  = '#669';
@@ -47,11 +47,10 @@ ctx.font = '48px Arial';
 
 var grid = Array.from({ length: h }, () => Array.from({ length: w }, () => EMPTY));
 
+if(back) link.href = 'https://2swap.github.io/WeakC4/?pos=' + (mode === 'practice' ? seq : position);
 if(mode === 'practice') {
-    if(back) link.href = 'https://connect4.gamesolver.org/?pos=' + seq;
     text.textContent = 'Play!';
 } else {
-    if(back) link.href = 'https://connect4.gamesolver.org/?pos=' + position;
     text.textContent = 'Pick the best next move!';
 }
 
@@ -132,20 +131,19 @@ var render = () => {
     }
 };
 
+populateGrid();
 if(mode !== 'practice') {
-    populateGrid();
     render();
 } else {
     // Practice interactive mode:
     // seq contains the full move sequence; player clicks to play the first-player moves (even indices),
     // computer automatically plays the following second-player move (odd indices).
-    seqIndex = 0;
+    seqIndex = back ? position.length : 0;
     render();
 
     var canvasEl = document.getElementById('canvas');
 
     canvasEl.addEventListener('mousemove', function(e) {
-        if(mode !== 'practice') return;
         if(seqIndex >= seq.length) {
             hoverCol = -1;
             render();
@@ -169,13 +167,11 @@ if(mode !== 'practice') {
     });
 
     canvasEl.addEventListener('mouseout', function() {
-        if(mode !== 'practice') return;
         hoverCol = -1;
         render();
     });
 
     canvasEl.addEventListener('click', function(e) {
-        if(mode !== 'practice') return;
         if(seqIndex >= seq.length) return;
         // only allow click on player's turn
         if(seqIndex % 2 !== 0) return;
