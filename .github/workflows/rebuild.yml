@@ -1,0 +1,69 @@
+name: Rebuild graph artifacts
+
+# Runs after anything lands on main that can change the graph: regenerates the
+# artifacts, verifies the whole graph, and commits if they changed.
+#
+# It runs here rather than inside the pull request on purpose. A workflow
+# triggered by a fork's pull request would need write access to push the
+# rebuilt files back, and granting that would let an untrusted branch run its
+# own code with write permissions. Here the code has already been merged.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - steady_states.txt
+      - graph/**
+      - build_graph.py
+      - verify_steady_states.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild-main
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: '3.12'}
+      - run: pip install --quiet protobuf
+
+      - name: Rebuild
+        run: python build_graph.py --markdown | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the whole graph
+        run: python verify_steady_states.py --markdown | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- c4_full.js protobuf/c4_full.pb.gz; then
+            echo "artifacts already up to date"
+            exit 0
+          fi
+          nodes=$(python -c "import verify_steady_states as v; \
+            print(len(v.load_dataset('c4_full.js')['nodes_to_use']))")
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add c4_full.js protobuf/c4_full.pb.gz
+          git commit -m "Rebuild graph artifacts ($nodes nodes)"
+          # A commit landing on main during the rebuild rejects this push. If it
+          # did not touch the sources above, these artifacts are still correct
+          # and rebasing publishes them; if it did, it queued its own rebuild
+          # that supersedes this one. Without the retry the graph just stays
+          # stale until the next qualifying push.
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "push rejected, rebasing onto main (attempt $attempt)"
+            git pull --rebase origin main
+          done
+          git push
