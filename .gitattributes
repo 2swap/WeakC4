@@ -1,0 +1,9 @@
+# The graph files are machine-written: graph/base_c4_full.js comes out of
+# SwapTube, and c4_full.js is built from it by build_graph.py. Collapse them in
+# diffs instead of rendering two megabytes of JSON on one line, and keep git
+# away from their bytes so a rebuild stays reproducible on any platform.
+c4_full.js             -text linguist-generated=true
+graph/base_c4_full.js  -text linguist-generated=true
+
+# Contributors on Windows would otherwise submit CRLF grids.
+steady_states.txt      text eol=lf
