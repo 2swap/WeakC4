@@ -197,19 +197,12 @@ def verify_leaf(position, diagram):
     return red_turn(board)
 
 
-def _verify_one(item):
-    # multiprocessing pickles the worker by qualified name, so this has to be a
-    # module-level function. A lambda or a closure over verify_leaf will not
-    # pickle. It exists only to unpack one tuple per task.
-    return verify_leaf(*item)
-
-
 def verify_all(items, jobs):
     """Verify [(position, diagram)], optionally across processes."""
     if jobs > 1 and len(items) > 1:
         with multiprocessing.Pool(jobs) as pool:
-            return list(pool.imap(_verify_one, items, chunksize=8))
-    return [_verify_one(item) for item in items]
+            return pool.starmap(verify_leaf, items, chunksize=8)
+    return [verify_leaf(*item) for item in items]
 
 
 # --------------------------------------------------------------------------
