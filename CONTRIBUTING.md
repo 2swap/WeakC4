@@ -48,9 +48,10 @@ unique move suggested by this priority list":
 
 - **A tie between two markers at the same priority level is a failure**, not a
   coin flip. This has nothing to do with a drawn game. Two playable cells at
-  the applicable level means the diagram is rejected. The viewer, `client.js`,
-  is looser and silently takes the leftmost, so a diagram can look fine on the
-  website and still be rejected here.
+  the applicable level means the diagram is rejected. Note that the viewer does
+  not enforce this, since it only has to play a move and takes the leftmost of
+  a tie, so watching the site play an ambiguous diagram will not reveal that it
+  is ambiguous. Nothing there is checking.
 - **Claimodd and claimeven are one level**, being a single numbered item on
   that list. A playable claimodd and a playable claimeven at once is a tie.
 

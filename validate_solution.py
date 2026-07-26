@@ -17,8 +17,10 @@ a tie invalidates the diagram, and claimodd/claimeven share one level. The
 original generator agreed: SteadyState.cpp returned an error code on a tie. It
 lived in swaptube until 2swap/swaptube@e46484b removed it.
 
-The viewer, client.js, is looser and takes the leftmost of a tie, so a
-diagram can work on the site and still be rejected here.
+The viewer does not enforce that guarantee, since it only has to play a move
+and takes the leftmost of a tie. So watching the site play an ambiguous diagram
+will not reveal that it is ambiguous, and a diagram that looks fine there can
+still be rejected here.
 """
 from __future__ import annotations
 
@@ -558,11 +560,34 @@ def self_test(graph_path, samples):
     rng = random.Random(0)
     palette = MARKERS.replace(".", "")  # the charset as the graph stores it
 
+    def immediate_wins(board, player):
+        out = []
+        for x in range(COLS):
+            y = col_height(board, x)
+            if y >= ROWS:
+                continue
+            board[y][x] = player
+            if makes_four(board, x, y, player):
+                out.append(x)
+            board[y][x] = 0
+        return out
+
     failures = []
-    no_move = 0
+    no_move = skipped = 0
     for _ in range(samples):
         position = rng.choice(positions)
         board = board_from_position(position)
+
+        # The win and block steps scan left to right and take the first hit,
+        # which is a left/right bias. It is harmless, since any winning move
+        # wins and the priority list promises uniqueness only for the markers,
+        # but it does mean equivariance holds only where those steps are
+        # unambiguous. No position in this graph has two immediate wins for
+        # either side, because Red can block only one, so this skips nothing
+        # today and stops the test failing on a correct graph if that changes.
+        if len(immediate_wins(board, 1)) > 1 or len(immediate_wins(board, 2)) > 1:
+            skipped += 1
+            continue
         diagram = [
             "".join(
                 STONES[board[ROWS - 1 - yt][x] - 1] if board[ROWS - 1 - yt][x]
@@ -585,6 +610,7 @@ def self_test(graph_path, samples):
     return {
         "mode": "self-test",
         "samples": samples,
+        "skipped_ambiguous_win": skipped,
         "no_move_states_sampled": no_move,
         "failures": failures[:20],
         "failure_count": len(failures),
