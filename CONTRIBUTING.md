@@ -1,6 +1,6 @@
 # Contributing steady-state diagrams
 
-Every steady-state diagram found at an expanded node makes the graph smaller,
+Every steady-state diagram found at a non-leaf node makes the graph smaller,
 because that node's private subtree stops being needed. That is what a
 contribution is here, and it can be settled by machine: a diagram either beats
 every Yellow reply or it does not. CI runs that check for you.
@@ -25,9 +25,11 @@ every Yellow reply or it does not. CI runs that check for you.
 - `!` urgent, `@` miai, `|` claimodd, `.` claimeven, `+` plus, `=` equal,
   `-` minus; `1` Red stone, `2` Yellow stone. The stones must match the
   position, which catches a mistyped move sequence.
-- Write claimeven as `.`, not a space — the graph stores a space, but trailing
-  spaces are invisible and get stripped.
-- Blank lines and `#` comments are ignored; keep entries sorted by position.
+- Write claimeven as `.`, not a space. The graph stores a space, but trailing
+  spaces are invisible and get stripped by editors.
+- Blank lines and `#` comments are ignored. Order does not matter, since the
+  build produces identical output whatever order entries appear in, but
+  sorting by position keeps diffs tidy.
 
 `c4_full.js` and `protobuf/c4_full.pb.gz` are **generated** by `build_graph.py`
 and rebuilt automatically after merge. A pull request that edits them is
@@ -44,16 +46,17 @@ continuation; a draw is not enough.
 Two consequences of the site's guarantee that "there is always precisely one
 unique move suggested by this priority list":
 
-- **A tie is a failure, not a coin flip.** Two playable cells at the applicable
-  level means the diagram is rejected. The viewer, `client.js`, is looser — it
-  silently takes the leftmost — so a diagram can look fine on the website and
-  still be rejected here.
+- **A tie between two markers at the same priority level is a failure**, not a
+  coin flip. This has nothing to do with a drawn game. Two playable cells at
+  the applicable level means the diagram is rejected. The viewer, `client.js`,
+  is looser and silently takes the leftmost, so a diagram can look fine on the
+  website and still be rejected here.
 - **Claimodd and claimeven are one level**, being a single numbered item on
   that list. A playable claimodd and a playable claimeven at once is a tie.
 
 ## What makes the graph valid
 
-Four rules, all checked by `verify_steady_states.py`. The first, second and
+Four rules, all checked by `validate_solution.py`. The first, second and
 fourth are structural and take about a tenth of a second; the third is the
 exhaustive search and is what the runtime actually goes on:
 
@@ -69,10 +72,10 @@ best, because the subtree below a move is its own certificate.
 
 ## Checking before you open a pull request
 
-The verifier needs only the standard library:
+The checker needs only the standard library:
 
 ```bash
-python verify_steady_states.py --entries
+python validate_solution.py --entries
 ```
 
 To see how much the graph shrinks:
@@ -90,12 +93,16 @@ collapsed, or if its position is not a branching node.
 
 ## What CI does
 
-Verifies every diagram you added or changed; self-tests the verifier by
-checking that reflecting a board reflects the chosen move and nothing else;
-reports the node count before and after; and rebuilds the graph. Adding a
-diagram cannot invalidate an existing one — validity depends only on a
-diagram's own position and markers — so the whole graph is rechecked only when
-the verifier or the base graph changes.
+It verifies every diagram you added or changed, reports the node count before
+and after, and rebuilds the graph. Adding a diagram cannot invalidate an
+existing one, since validity depends only on a diagram's own position and
+markers, so the whole graph is rechecked only when the checker or the base
+graph changes.
+
+It also self-tests the checker, by confirming that reflecting a board reflects
+the chosen move and nothing else. That is a test of this code rather than a
+requirement on your diagram. Nothing asks you to supply mirrors, and a board
+that is already mirror-symmetric needs nothing special.
 
 Results appear in the **Summary** panel of the workflow run, linked from the
 Checks tab. A first-time contribution needs a maintainer to approve the run, so

@@ -44,7 +44,7 @@ jobs:
           # Adding a diagram cannot invalidate an existing one: validity depends
           # only on a diagram's own position and markers. Changing the verifier
           # or the base graph can, so only then is the whole graph rechecked.
-          if grep -qE '^(verify_steady_states\.py|build_graph\.py|graph/)' <<<"$changed"; then
+          if grep -qE '^(validate_solution\.py|build_graph\.py|graph/)' <<<"$changed"; then
             echo "FULL=1" >> "$GITHUB_ENV"
           fi
 
@@ -53,12 +53,12 @@ jobs:
 
       - name: Verify new diagrams
         run: |
-          python verify_steady_states.py --entries --baseline /tmp/baseline.txt \
+          python validate_solution.py --entries --baseline /tmp/baseline.txt \
             --markdown | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Verifier self-test
         run: |
-          python verify_steady_states.py --self-test 200 --graph graph/base_c4_full.js \
+          python validate_solution.py --self-test 200 --graph graph/base_c4_full.js \
             --markdown | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Rebuild and measure
@@ -71,5 +71,5 @@ jobs:
         # c4_full.js here is the one the previous step just rebuilt, not the
         # committed artifact. Named explicitly so that stays true.
         run: |
-          python verify_steady_states.py --graph c4_full.js \
+          python validate_solution.py --graph c4_full.js \
             --markdown | tee -a "$GITHUB_STEP_SUMMARY"

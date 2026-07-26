@@ -28,7 +28,7 @@ import re
 import sys
 from pathlib import Path
 
-import verify_steady_states as vss
+import validate_solution as solution
 
 HERE = Path(__file__).resolve().parent
 BASE_GRAPH = HERE / "graph" / "base_c4_full.js"
@@ -61,7 +61,7 @@ def load_base():
 
 
 def board_key(position):
-    return tuple(tuple(row) for row in vss.board_from_position(position))
+    return tuple(tuple(row) for row in solution.board_from_position(position))
 
 
 def reachable_from(nodes, root):
@@ -105,7 +105,7 @@ def apply_entries(dataset, entries):
         if not was_branching:
             notes.append({"position": position,
                           "note": "replaces a diagram already published at this node"})
-        node["data"]["ss"] = vss.ss_from_diagram(diagram)
+        node["data"]["ss"] = solution.ss_from_diagram(diagram)
         node["neighbors"] = None
         applied.append((position, node_hash, was_branching))
 
@@ -193,7 +193,7 @@ def build(skip_protobuf=False, entries_path=ENTRIES):
         # A path someone typed and got wrong must not silently build nothing.
         raise ValueError(f"{entries_path} does not exist")
     text = entries_path.read_text(encoding="utf-8") if entries_path.exists() else ""
-    entries = vss.parse_entries(text, source=entries_path.name)
+    entries = solution.parse_entries(text, source=entries_path.name)
     dataset, report = apply_entries(dataset, entries)
     artifacts = {OUT_JS: render_js(dataset, literals).encode("utf-8")}
     if not skip_protobuf:
@@ -230,7 +230,7 @@ def markdown(report):
             groups.setdefault(note["note"], []).append(note["position"])
         for text, positions in sorted(groups.items()):
             if len(positions) > 4:
-                out.append(f"- {len(positions)} entries -- {text} (e.g. `{positions[0]}`)")
+                out.append(f"- {len(positions)} entries, {text} (e.g. `{positions[0]}`)")
             else:
                 out.append(f"- {text}: " + ", ".join(f"`{p}`" for p in positions))
         out.append("")

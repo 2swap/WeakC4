@@ -15,7 +15,7 @@ on:
       - steady_states.txt
       - graph/**
       - build_graph.py
-      - verify_steady_states.py
+      - validate_solution.py
   workflow_dispatch:
 
 permissions:
@@ -42,7 +42,7 @@ jobs:
         run: python build_graph.py --markdown | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Verify the whole graph
-        run: python verify_steady_states.py --markdown | tee -a "$GITHUB_STEP_SUMMARY"
+        run: python validate_solution.py --markdown | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Commit if changed
         run: |
@@ -50,7 +50,7 @@ jobs:
             echo "artifacts already up to date"
             exit 0
           fi
-          nodes=$(python -c "import verify_steady_states as v; \
+          nodes=$(python -c "import validate_solution as v; \
             print(len(v.load_dataset('c4_full.js')['nodes_to_use']))")
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

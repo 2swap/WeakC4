@@ -1,11 +1,11 @@
-"""Exhaustively verify WeakC4 steady-state diagrams.
+"""Check a WeakC4 solution: the shape of the graph and every diagram in it.
 
 Standalone, Python standard library only. This file is the machine-readable
-definition of "valid diagram" for this repository.
+definition of "valid solution" for this repository.
 
-    python verify_steady_states.py                 # check all of c4_full.js
-    python verify_steady_states.py --entries       # check steady_states.txt
-    python verify_steady_states.py --self-test 200 # check the verifier itself
+    python validate_solution.py                 # check all of c4_full.js
+    python validate_solution.py --entries       # check steady_states.txt
+    python validate_solution.py --self-test 200 # check this code itself
 
 Red's move follows the priority list from the explanation page: win, block,
 '!' urgent, '@' miai (only when exactly one is playable), '|' claimodd on an
@@ -13,12 +13,12 @@ odd row or claimeven (space) on an even row, '+', '=', '-'. A diagram is valid
 at a position when Red wins from there against every legal Yellow reply.
 
 The site guarantees the applicable level always identifies exactly one move, so
-a tie invalidates the diagram, and claimodd/claimeven share one level. This
-matches the original generator, SteadyState.cpp, which lived in swaptube until
-2swap/swaptube@e46484b removed it and returned an error on a tie. The viewer,
-client.js, is
-looser -- it takes the leftmost of a tie -- so a diagram can work on the site
-and still be rejected here.
+a tie invalidates the diagram, and claimodd/claimeven share one level. The
+original generator agreed: SteadyState.cpp returned an error code on a tie. It
+lived in swaptube until 2swap/swaptube@e46484b removed it.
+
+The viewer, client.js, is looser and takes the leftmost of a tie, so a
+diagram can work on the site and still be rejected here.
 """
 from __future__ import annotations
 
@@ -196,6 +196,9 @@ def verify_leaf(position, diagram):
 
 
 def _verify_one(item):
+    # multiprocessing pickles the worker by qualified name, so this has to be a
+    # module-level function. A lambda or a closure over verify_leaf will not
+    # pickle. It exists only to unpack one tuple per task.
     return verify_leaf(*item)
 
 
@@ -239,7 +242,7 @@ def parse_entries(text, source="steady_states.txt"):
     for number, raw in enumerate(text.splitlines(), start=1):
         # Trailing spaces are kept, because a space is a legal claimeven and a
         # row ending in one must be reported rather than silently becoming
-        # short -- but a stripped comment leaves whitespace that was never the
+        # short. A stripped comment, though, leaves whitespace that was never the
         # contributor's, so drop that.
         content, _, comment = raw.partition("#")
         content = content.rstrip() if comment else content.rstrip("\r\n")
@@ -342,7 +345,7 @@ def entry_problem(position, diagram):
 # --------------------------------------------------------------------------
 
 def check_structure(nodes):
-    """Check the strategy's shape. Combinatorial -- no search, no solver.
+    """Check the strategy's shape. Combinatorial: no search, no solver.
 
     Together with a verified diagram at every leaf, these four rules ARE the
     proof that Red wins: Red commits to one legal move, Yellow's replies are
@@ -538,10 +541,17 @@ def self_test(graph_path, samples):
     """Mirror invariance of the policy: reflecting the board and the diagram
     must reflect the chosen move and change nothing else.
 
-    The diagrams must be RANDOM for this to have force. A valid diagram never
-    reaches a tie -- that is what makes it valid -- so replaying shipped
-    diagrams exercises no tie handling and passes even against a deliberately
-    left-biased policy. Random diagrams hit ties constantly.
+    This is narrow on purpose, and it is worth being clear about what it does
+    not cover. It tests one property, that no tie is silently broken by column
+    order. It says nothing about whether the priority order is right, whether
+    win and block really precede the markers, or whether the search in
+    verify_leaf is correct. Those are checked by running the whole graph.
+
+    The diagrams must be RANDOM for even that one property to be tested. A
+    valid diagram never reaches a tie, which is what makes it valid, so
+    replaying shipped diagrams exercises no tie handling and passes even
+    against a deliberately left-biased policy. Random diagrams hit ties
+    constantly.
     """
     nodes = load_dataset(graph_path)["nodes_to_use"]
     positions = sorted(node["rep"] for node in nodes.values())
