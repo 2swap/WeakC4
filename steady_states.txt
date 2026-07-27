@@ -1,0 +1,3 @@
+# Contributed steady-state diagrams for the WeakC4 graph.
+# Format: a position (Red to move, digits 1-7) then six grid rows,
+#   top row first, '.' = claimeven. See CONTRIBUTING.md.
