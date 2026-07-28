@@ -53,7 +53,7 @@
         <p>WeakC4 is a <i>search-free, low-knowledge</i> solution to 7x6 Connect 4, constructed by identifying a language which describes perfect play for a small subset of nodes, and then identifying a small opening tree which contains only those nodes as leaves.</p>
         <p>This website provides a formal <i>strategy</i> for optimal first-player <a href="https://en.wikipedia.org/wiki/Connect_Four">Connect Four</a> play, which is fundamentally different from existing <a href="https://en.wikipedia.org/wiki/Solved_game">strong and weak solutions</a> such as <a href="https://tromp.github.io/c4/fhour.html">Fhourstones</a>:</p>
         <ul>
-            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/protobuf/c4_full.pb.gz">about 150 kilobytes</a> as shown, even before de-duplicating symmetric pairs.</li>
+            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/protobuf/c4_full.pb.gz">about 33 kilobytes</a>.</li>
             <li>It uses no search during runtime, running at <i>O(wh)</i> time complexity to select a move.</li>
             <li>It can be visualized in its entirety and rendered in realtime.</li>
             <li>It visually illustrates and confirms the existence of particularly challenging openings, lines, and variations already known to connect 4 players.</li>
