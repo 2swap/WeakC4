@@ -1,8 +1,8 @@
 # The graph file is machine-written. Collapse it in
 # diffs instead of rendering two megabytes of JSON on one line, and keep git
 # away from their bytes so a rebuild stays reproducible on any platform.
-representations/webclient/graph.js -text linguist-generated=true
-solution/positions.txt             -text linguist-generated=true
+representations/webclient/graph.js      -text linguist-generated=true
+representations/webclient/positions.txt -text linguist-generated=true
 
 # Contributors on Windows would otherwise submit CRLF grids.
 steady_states.txt text eol=lf

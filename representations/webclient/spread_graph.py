@@ -1,4 +1,4 @@
-"""Force-directed 3D layout for solution/positions.txt.
+"""Force-directed 3D layout for representations/webclient/positions.txt.
 
 Every pair of nodes repels, and every edge attracts.
 """
@@ -10,9 +10,9 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-WEBCLIENT_DIR = HERE.parent / "representations" / "webclient"
+SOLUTION_DIR = HERE.parent.parent / "solution"
+sys.path.insert(0, str(SOLUTION_DIR))
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(WEBCLIENT_DIR))
 import validate_solution as solution  # noqa: E402
 import render  # noqa: E402
 

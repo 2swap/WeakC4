@@ -13,9 +13,10 @@ root. A Red-to-move board with no entry in either file needs neither, because
 Red already has an immediate win there; such boards are simply not rendered,
 since there is nothing further to click through to.
 
-3D layout comes from solution/positions.txt, which still has one entry per
-board of the original (undeduped) graph. A board only reachable in its mirror
-orientation borrows its mirror twin's coordinates, with x negated.
+3D layout comes from representations/webclient/positions.txt, which still has
+one entry per board of the original (undeduped) graph. A board only reachable
+in its mirror orientation borrows its mirror twin's coordinates, with x
+negated.
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ import validate_solution as solution  # noqa: E402
 HERE = Path(__file__).resolve().parent
 BRANCHES = SOLUTION_DIR / "branches.txt"
 STEADY_STATES = SOLUTION_DIR / "steady_states.txt"
-POSITIONS = SOLUTION_DIR / "positions.txt"
+POSITIONS = HERE / "positions.txt"
 OUT_JS = HERE / "graph.js"
 
 BOARD_H, BOARD_W, GAME_NAME = solution.ROWS, solution.COLS, "c4"
