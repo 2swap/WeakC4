@@ -1,16 +1,18 @@
 name: Verify contributions
 
-# Runs on every pull request: exhaustively validates the whole solution/
-# graph. Read-only, so it is safe on fork branches.
+# Runs on every commit - both direct pushes and pull requests - exhaustively
+# validating the whole solution/ graph. Read-only, so it is safe on fork
+# branches.
 
 on:
+  push:
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: verify-${{ github.event.pull_request.number }}
+  group: verify-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 defaults:
@@ -29,10 +31,17 @@ jobs:
 
       - name: Inspect the diff
         env:
-          BASE: ${{ github.base_ref }}   # via env, never pasted into the command
+          BASE: ${{ github.base_ref }}         # set for pull_request events
+          BEFORE: ${{ github.event.before }}   # set for push events
         run: |
-          git fetch --quiet origin "$BASE"
-          changed=$(git diff --name-only "origin/$BASE...HEAD")
+          if [ -n "$BASE" ]; then
+            git fetch --quiet origin "$BASE"
+            changed=$(git diff --name-only "origin/$BASE...HEAD")
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            changed=$(git diff --name-only "$BEFORE" HEAD)
+          else
+            changed=""   # first commit on a new branch: nothing to compare against
+          fi
           echo "$changed"
 
           if grep -qE '^representations/(webclient/graph\.js|protobuf/.*\.pb)$' <<<"$changed"; then

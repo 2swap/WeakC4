@@ -1,15 +1,12 @@
 name: Publish GitHub Pages
 
 # Publishes representations/webclient/ as the site at
-# https://2swap.github.io/WeakC4/. Runs whenever that directory changes on
-# main - including the commit rebuild.yml itself makes when it regenerates
-# graph.js, so the live site always reflects the latest rebuilt graph.
+# https://2swap.github.io/WeakC4/. Runs on every commit to main, so the live
+# site never lags behind whatever's currently checked in there.
 
 on:
   push:
     branches: [main]
-    paths:
-      - representations/webclient/**
   workflow_dispatch:
 
 permissions:
