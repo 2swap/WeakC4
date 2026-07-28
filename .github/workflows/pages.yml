@@ -1,8 +1,11 @@
 name: Publish GitHub Pages
 
-# Publishes representations/webclient/ as the site at
-# https://2swap.github.io/WeakC4/. Runs on every commit to main, so the live
-# site never lags behind whatever's currently checked in there.
+# Publishes the site at https://2swap.github.io/WeakC4/. Runs on every commit
+# to main, so the live site never lags behind whatever's currently checked in.
+#
+# The site is representations/webclient/ with explanation/ mounted beneath it:
+# index.html links to "explanation" and the explanation pages link back with
+# "../", so they have to be served one level apart.
 
 on:
   push:
@@ -27,8 +30,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v5
+      - name: Assemble the site
+        run: |
+          mkdir _site
+          cp -r representations/webclient/. _site/
+          cp -r explanation _site/explanation
+          rm -rf _site/render.py _site/__pycache__
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: representations/webclient
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
