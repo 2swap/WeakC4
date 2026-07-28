@@ -45,7 +45,9 @@ def attraction_force(pi, pj):
     if length < 1e-9:
         return 0.0, 0.0, 0.0
     dist_6th = dist_sq * dist_sq * dist_sq * 0.05
-    multiplier = (dist_6th - 1.0) / (dist_6th + 1.0) * 0.2 - 0.1
+    # Crosses zero at r = 60**(1/6) ~= 1.98: a pair further apart than that is
+    # pulled together, a closer one is pushed apart.
+    multiplier = 0.1 - (dist_6th - 1.0) / (dist_6th + 1.0) * 0.2
     scale = multiplier / length
     return dx * scale, dy * scale, dz * scale
 

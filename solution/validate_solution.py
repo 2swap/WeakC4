@@ -246,7 +246,9 @@ def load_branches(path):
                 f"{path.name}:{number}: expected '<position>-><move>', got {raw!r}"
             )
         position, move = raw.split("->", 1)
-        if move not in "1234567":
+        # `in` on a str is a substring test, so the length check is what stops
+        # "12" and "" from passing as a single column.
+        if len(move) != 1 or move not in "1234567":
             raise ValueError(
                 f"{path.name}:{number}: move must be a single digit 1-7, got {move!r}"
             )
@@ -303,8 +305,8 @@ def parse_entries(text, source="steady_states.txt"):
         # row ending in one must be reported rather than silently becoming
         # short. A stripped comment, though, leaves whitespace that was never the
         # contributor's, so drop that.
-        content, _, comment = raw.partition("#")
-        content = content.rstrip() if comment else content.rstrip("\r\n")
+        content, hash_mark, _ = raw.partition("#")
+        content = content.rstrip() if hash_mark else content.rstrip("\r\n")
         if content.strip():
             lines.append((number, content))
 
