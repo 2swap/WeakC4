@@ -7,43 +7,7 @@ from pathlib import Path
 board_width = 7
 board_height = 6
 
-prefixes = [
-    "Very Beginning",
-
-    "6-1",
-    "Crown Variations",
-    "True Candlesticks",
-    "Half Candlesticks",
-
-    "Fist Variations",
-    "Palm Variations",
-    "4366",
-    "Hills Opening",
-
-    "4363",
-    "Other 4367 Lines",
-    "Triline",
-    "D3-D4 Openings",
-    "Shoulder Spike",
-    "4444452",
-    "3-2",
-
-    "426564",
-    "426566",
-    "Two-bar",
-    "Two-holes",
-    "Bent two-bar",
-    "Tall Cup Opening",
-    "Short Cup Opening",
-    "No Cup Opening",
-    "Other 462 Lines",
-    "47",
-]
 indices = dict([(item, index) for index, item in enumerate(prefixes)])
-
-practice = [
-        TODO This needs to be updated.
-]
 
 def make_board_array_from_rep(rep):
     board = [[0]*board_width for _ in range(board_height)]
@@ -57,9 +21,6 @@ def make_board_array_from_rep(rep):
 
 def is_equal(rep1, rep2):
     return make_board_array_from_rep(rep1) == make_board_array_from_rep(rep2)
-
-import random
-random.shuffle(practice)
 
 def who_won(board):
     # Check horizontal, vertical, and diagonal for a winner
@@ -201,17 +162,6 @@ def build_dataset(js_path):
 
     print(f"Added {len(cards)} cards to Anki.")
 
-def build_practice():
-    print("Building practice cards...")
-    create_anki_deck(deck_name + "::Practice")
-    practice_cards = []
-    for practice_string in practice:
-        practice_cards.append( (deck_name + "::Practice", "practice:" + practice_string, "") )
-
-    anki_add_notes(practice_cards)
-
-    print(f"Added {len(practice_cards)} practice cards to Anki.")
-
 def build_instructions():
     print("Building instructions...")
     create_anki_deck(deck_name + "::Instructions")
@@ -232,6 +182,3 @@ def build_instructions():
 
 build_instructions()
 build_dataset("../c4_full_prefixes.js")
-import time
-time.sleep(10)
-build_practice()

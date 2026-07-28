@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+message Branch {
+  bytes rep = 1; // Sequence of 3-byte entries constructing the input
+  uint32 move = 2; // Always 3 bytes: response is in [0...7] inclusive.
+}
+
+message Branches {
+  repeated Branch branches = 1;
+}
+
+message SteadyState {
+  bytes steadystate = 1; // 9 legal symbols in a steady state, 42 cells -> ceil(log2(9^42))
+}
+
+message SteadyStates {
+  repeated SteadyState steadystates = 1;
+}
+
+message Solution {
+  Branches branches = 1;
+  SteadyStates steadystates = 2;
+}

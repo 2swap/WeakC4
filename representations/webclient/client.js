@@ -4,8 +4,6 @@ const boardctx = boardcanvas.getContext(`2d`);
 const graphctx = graphcanvas.getContext(`2d`);
 const w = graphcanvas.width = window.innerWidth;
 const h = graphcanvas.height = window.innerHeight;
-// Loading message while the data is being fetched and processed
-document.getElementById("loading-message").style.display = "block";
 
 var EMPTY       = "#049";
 var RED         = "#f00";
@@ -20,26 +18,28 @@ let board_arr = 0;
 var square_sz = 40;
 var extraMoves = "";
 
-function hash_a_board(board_to_hash) {
-    let a = 1;
-    let semihash = 0;
-    for (let i = 0; i < dataset.board_h; i++) {
-        for (let j = 0; j < dataset.board_w; j++) {
-            semihash += board_to_hash[dataset.board_h-1-i][j] * a;
-            a *= 1.021813947;
-        }
-    }
+function board_to_key(board_to_hash) {
+    return board_to_hash.map(row => row.join(",")).join(";");
+}
 
-    var closedist = 0.00000001;
-    var closename = -1;
-    for(name in nodes){
-        var dist = Math.abs(semihash-name);
-        if(dist < closedist){
-            closename = name;
-            closedist = dist;
-        }
+// Node names are now move-sequence strings (equal to each node's own `rep`),
+// not the old numeric content-hashes a board could be matched against by
+// nearest value. This table maps each known node's own board content to its
+// name, built once nodes are loaded, so a board reached by a different move
+// order (a transposition, or play continuing past a leaf) can still be
+// matched back to its graph node.
+var board_lookup_table = {};
+
+function build_board_lookup_table() {
+    board_lookup_table = {};
+    for (const name in nodes) {
+        board_lookup_table[board_to_key(construct_board_arr(nodes[name].rep))] = name;
     }
-    return closename;
+}
+
+function hash_a_board(board_to_hash) {
+    const key = board_to_key(board_to_hash);
+    return key in board_lookup_table ? board_lookup_table[key] : -1;
 }
 
 function construct_board_arr(board_string) {
@@ -87,8 +87,6 @@ function render_board () {
     boardctx.textAlign = "left";
     boardctx.fillStyle = "white";
     var dy = 0;
-    opening = nodes[hash].prefix;
-    boardctx.fillText("Opening name: " + opening, 8, (dy+=16)+square_sz * dataset.board_h);
     if(winningLine)
         boardctx.fillText("Press 'r' to reset!", 8, (dy+=16)+square_sz * dataset.board_h);
     else if(extraMoves == "") {
@@ -349,7 +347,7 @@ function update_opacity() {
     }
 }
 
-function on_click_node(){ hash_stack = [{"hash":0,"extra":""}]; extraMoves = ""; update_opacity(); }
+function on_click_node(){ hash_stack = [{"hash":dataset.root_node_hash,"extra":""}]; extraMoves = ""; update_opacity(); }
 
 function repstr(){
     return nodes[hash].rep + extraMoves;
@@ -398,87 +396,6 @@ let diffcoords = {x:0,y:0};
 let board_click_square = ';';
 
 on_board_change = function(){};
-
-const prefixList = [
-    {"Two-bar": ["436766"]},
-    {"Bent two-bar": ["436761663"]},
-    {"Short Cup Opening": ["46213522"]},
-    {"Tall Cup Opening": ["46213524224"]},
-    {"No Cup Opening": ["46213523"]},
-    {"6-1": ["4444445"]},
-    {"47": ["47"]},
-    {"426566": ["426566"]},
-    {"426564": ["426564"]},
-    {"Shoulder Spike": ["44444521", "44444524"]},
-    {"4444452": ["4444452"]},
-    {"True Candlesticks": ["44444222266"]},
-    {"Half Candlesticks": ["444442222", "444446622"]},
-    {"Crown Variations": ["44444"]},
-    {"D3-D4 Openings": ["4442", "4441"]},
-    {"4363": ["4363"]},
-    {"Fist Variations": ["4366755535"]},
-    {"Palm Variations": ["436556766"]},
-    {"4366": ["4366"]},
-    {"Triline": ["4623272", "4623262"]},
-    {"Other 4367 Lines": ["4367"]},
-    {"3-2": ["4443673", "4443613"]},
-    {"Two-holes": ["4361"]},
-    {"Other 462 Lines": ["462"]},
-    {"Hills Opening": ["4443655", "4364455", "4365", "452443"]},
-    {"Very Beginning": [""]}
-]
-
-// Set the prefix for each node based on the prefixList
-function set_one_prefix(dict) {
-    const pref = Object.keys(dict)[0];
-    const sequence_list = dict[pref];
-    for (const prefix_half of sequence_list) {
-        const norm_and_inv = [prefix_half, invert_around_4(prefix_half)];
-        for(const prefix of norm_and_inv) {
-            const hash_of_prefix = hash_a_board(construct_board_arr(prefix));
-            var stack = [hash_of_prefix];
-            while (stack.length > 0) {
-                let current = stack.pop();
-                if(typeof nodes[current] == "undefined") continue;
-                if(nodes[current].prefix) continue;
-                nodes[current].prefix = pref;
-                if (!nodes[current].neighbors) continue;
-                for (const neighbor_name of nodes[current].neighbors) {
-                    if(!nodes[neighbor_name].prefix)
-                    stack.push(neighbor_name);
-                }
-            }
-        }
-    }
-}
-
-function set_prefixes() {
-    for (const dict of prefixList) {
-        set_one_prefix(dict);
-    }
-
-    // Copy prefixes onto dataset
-    for (const name in nodes) {
-        dataset.nodes_to_use[name].prefix = nodes[name].prefix;
-    }
-    document.getElementById("loading-message").style.display = "none";
-}
-
-// optional color mapping
-var prefixColors = { };
-// Make color mapping for each prefix, using a hash function to generate a color from the prefix string
-for (const dict of prefixList) {
-    const pref = Object.keys(dict)[0];
-    let hash = 0;
-    for (let i = 0; i < pref.length; i++) {
-        hash = pref.charCodeAt(i) + (hash << 4);
-        // Modulus by a large prime
-        hash %= 100007;
-    }
-    hash = hash << 5;
-    const color = `hsl(${hash % 359}, ${20 + (hash % 71)}%, ${30 + (hash % 53)}%)`;
-    prefixColors[pref] = color;
-}
 
 function sum_digits(str) {
     let sum = 0;
@@ -551,15 +468,6 @@ function get_one_opening_per_leaf(){
     return openings;
 }
 
-function invert_around_4(str) {
-    let result = "";
-    for (let char of str) {
-        const invertedDigit = 8 - (char.charCodeAt(0) - '0'.charCodeAt(0));
-        result += String.fromCharCode(invertedDigit + '0'.charCodeAt(0));
-    }
-    return result;
-}
-
 $(document).ready(async function() {
     if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
         document.body.style.margin = '0';
@@ -593,7 +501,7 @@ $(document).ready(async function() {
         nodes = {};
 
         function reset_hash(){
-            hash_stack = [{"hash":0, "extra":""}];
+            hash_stack = [{"hash":dataset.root_node_hash, "extra":""}];
             hash = dataset.root_node_hash;
             for (const name in nodes) nodes[name].opacity = 1;
             on_click_node();
@@ -602,6 +510,7 @@ $(document).ready(async function() {
         reset_hash();
 
         resizePointCloud();
+        build_board_lookup_table();
 
         function resizePointCloud() {
             nodes = {};
@@ -642,8 +551,6 @@ $(document).ready(async function() {
                 node.opacity = 1;
                 nodes[name] = node;
             }
-
-            // Call set_prefixes_async asynchronously
         }
 
         function render_blurb(){
@@ -676,10 +583,6 @@ $(document).ready(async function() {
                     graphctx.lineTo(neighbor.screen_x, neighbor.screen_y);
                     graphctx.stroke();
                     graphctx.globalAlpha = 1;
-                }
-                if(openings_on && (nodes[hash].rep.length < 2 || node.prefix == nodes[hash].prefix)){
-                    graphctx.fillStyle = prefixColors[node.prefix];
-                    graphctx.fillRect(node.screen_x-1, node.screen_y-1, 3, 3);
                 }
             }
             graphctx.strokeStyle = `white`;
@@ -787,14 +690,12 @@ $(document).ready(async function() {
             window.history.pushState({}, '', url);
         }
 
-        set_prefixes();
-
         // If the user uses a URL ending in ?pos=4366, find url_pos = 4366
         var urlParams = new URLSearchParams(window.location.search);
         var url_pos = urlParams.get('pos');
         if(url_pos) {
             hash = hash_a_board(construct_board_arr(url_pos));
-            if(hash == -1) hash = 0;
+            if(hash == -1) hash = dataset.root_node_hash;
             extraMoves = "";
         }
         update_opacity();

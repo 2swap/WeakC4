@@ -149,10 +149,9 @@
         <ul>
             <li>It uses no search during runtime, running at <i>O(wh)</i> time complexity to select a move at any valid position.</li>
             <li>It has been reduced to a total of under 10,000 nodes (subject to further reduction, see the graph page for a live count.) About two-thirds of these nodes are leaves representing steady states.</li>
-            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/protobuf/c4_full.pb.gz">about 150 kilobytes</a>, even including mirrored positions.</li>
+            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/representations/protobuf/solution.pb">about 33 kilobytes</a>.</li>
             <li>This level of compression can be compared to <a href="https://tromp.github.io/c4/connect4_thesis.pdf">Allis (1988)</a>, who found an opening book of 500,000 nodes which permitted real-time play, but still invoked search.</li>
             <li>Traversing this tree and confirming its validity runs slightly faster on my machine than solving the game directly with Fhourstones, in some sense implying that this is the fastest "proof-by-compute" of the claim that connect 4 is a player-1-to-win game. This is even the case without any clever proof-of-correctness of steady-states which I have yet to implement- we are just brute-force checking them.</li>
-            <li>Both of these metrics could further be reduced by about half, as they included search and storage of mirror positions.</li>
             <li>Sooner or later, I will make an Anki opening deck using the discovered branches, so that humans who wish to attempt memorization can do so.</li>
             <li>It can be visualized in its entirety and rendered in realtime.</li>
             <li>It visually illustrates and confirms the existence of particularly challenging openings, lines, and variations already known to connect 4 players.</li>
