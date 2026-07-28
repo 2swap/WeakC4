@@ -33,6 +33,7 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir _site
+          cp sample.png _site/
           cp -r representations/webclient/. _site/
           cp -r explanation _site/explanation
           rm -rf _site/render.py _site/__pycache__
