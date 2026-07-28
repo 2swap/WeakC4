@@ -15,6 +15,7 @@ on:
     paths:
       - solution/branches.txt
       - solution/steady_states.txt
+      - solution/positions.txt
       - representations/webclient/**
       - representations/protobuf/**
   workflow_dispatch:
@@ -63,6 +64,11 @@ jobs:
             if grep -qE '^solution/(branches|steady_states)\.txt$' <<<"$changed"; then
               echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
               echo "RENDER_PROTOBUF=1" >> "$GITHUB_ENV"
+            fi
+            # positions.txt is layout only, and the protobuf carries no layout,
+            # so a coordinate change concerns the webclient alone.
+            if grep -q '^solution/positions\.txt$' <<<"$changed"; then
+              echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
             fi
             if grep -q '^representations/webclient/' <<<"$changed"; then
               echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
