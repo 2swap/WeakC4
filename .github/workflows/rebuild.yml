@@ -17,7 +17,7 @@ on:
       - solution/steady_states.txt
       - representations/webclient/**
       - representations/protobuf/**
-      - representations/anki/**
+#      - representations/anki/**
   workflow_dispatch:
 
 permissions:
@@ -53,7 +53,7 @@ jobs:
             echo "manually triggered (or no prior commit to diff against): rendering everything"
             echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
             echo "RENDER_PROTOBUF=1" >> "$GITHUB_ENV"
-            echo "RENDER_ANKI=1" >> "$GITHUB_ENV"
+#            echo "RENDER_ANKI=1" >> "$GITHUB_ENV"
           else
             changed=$(git diff --name-only "$BEFORE" HEAD)
             echo "$changed"
@@ -65,7 +65,7 @@ jobs:
             if grep -qE '^solution/(branches|steady_states)\.txt$' <<<"$changed"; then
               echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
               echo "RENDER_PROTOBUF=1" >> "$GITHUB_ENV"
-              echo "RENDER_ANKI=1" >> "$GITHUB_ENV"
+#              echo "RENDER_ANKI=1" >> "$GITHUB_ENV"
             fi
             if grep -q '^representations/webclient/' <<<"$changed"; then
               echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
@@ -73,9 +73,9 @@ jobs:
             if grep -q '^representations/protobuf/' <<<"$changed"; then
               echo "RENDER_PROTOBUF=1" >> "$GITHUB_ENV"
             fi
-            if grep -q '^representations/anki/' <<<"$changed"; then
-              echo "RENDER_ANKI=1" >> "$GITHUB_ENV"
-            fi
+#            if grep -q '^representations/anki/' <<<"$changed"; then
+#              echo "RENDER_ANKI=1" >> "$GITHUB_ENV"
+#            fi
           fi
 
       - name: Render webclient
@@ -86,9 +86,9 @@ jobs:
         if: env.RENDER_PROTOBUF == '1'
         run: python representations/protobuf/render.py
 
-      - name: Render anki
-        if: env.RENDER_ANKI == '1'
-        run: python representations/anki/render.py
+#      - name: Render anki
+#        if: env.RENDER_ANKI == '1'
+#        run: python representations/anki/render.py
 
       - name: Commit if changed
         run: |
