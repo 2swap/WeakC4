@@ -1,9 +1,6 @@
-"""Print basic statistics about the solution and about how the graph is drawn.
-
-    python solution/print_statistics.py
-
-Reads the webclient's positions.txt, then steady_states.txt and branches.txt,
-each independently; the sections below stand on their own.
+"""
+Print basic statistics about the solution and about how the graph is drawn.
+Reads steady_states.txt and branches.txt independently.
 """
 from __future__ import annotations
 
@@ -18,7 +15,6 @@ STEADY_STATES = HERE / "steady_states.txt"
 BRANCHES = HERE / "branches.txt"
 
 RESET = "\033[0m"
-COLOR_POSITIONS = "\033[36m"       # cyan
 COLOR_STEADY_STATES = "\033[33m"   # yellow
 COLOR_BRANCHES = "\033[32m"        # green
 COLOR_SECTION = "\033[1m"          # bold
@@ -32,34 +28,6 @@ def data_lines(path):
     for raw in path.read_text(encoding="utf-8").splitlines():
         if raw.strip() and not raw.startswith("#"):
             yield raw
-
-
-def print_positions_stats():
-    rows = []
-    root_xyz = None
-    for line in data_lines(POSITIONS):
-        position, x, y, z = line.split(",")
-        x, y, z = float(x), float(y), float(z)
-        rows.append((position, x, y, z))
-        if position == "":
-            root_xyz = (x, y, z)
-
-    n = len(rows)
-    cx = sum(r[1] for r in rows) / n
-    cy = sum(r[2] for r in rows) / n
-    cz = sum(r[3] for r in rows) / n
-
-    farthest_position, farthest_distance = None, -1.0
-    for position, x, y, z in rows:
-        distance = math.sqrt(x * x + y * y + z * z)
-        if distance > farthest_distance:
-            farthest_position, farthest_distance = position, distance
-
-    cprint(COLOR_POSITIONS, f"nodes with positions: {n}")
-    cprint(COLOR_POSITIONS, f"center of mass: ({cx:.3f}, {cy:.3f}, {cz:.3f})")
-    cprint(COLOR_POSITIONS, f"most distant node from origin: {farthest_position!r} "
-           f"at distance {farthest_distance:.3f}")
-    cprint(COLOR_POSITIONS, f"root node position: {root_xyz}")
 
 
 def print_steady_states_stats():
@@ -120,10 +88,6 @@ def print_branches_stats():
 
 
 def main():
-    print()
-    cprint(COLOR_SECTION, "==================== positions.txt ====================")
-    print_positions_stats()
-    cprint(COLOR_SECTION, "================== end positions.txt ==================")
     print()
     cprint(COLOR_SECTION, "================= steady_states.txt ===================")
     print_steady_states_stats()

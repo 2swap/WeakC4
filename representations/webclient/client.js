@@ -496,7 +496,7 @@ $(document).ready(async function() {
 
         let tick = 0;
         let ox = 0; let oy = 100; let zoom = 1;
-        let alpha = 0.8, beta=0;
+        let alpha = 0, beta = 0;
 
         nodes = {};
 

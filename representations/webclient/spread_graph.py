@@ -18,7 +18,7 @@ import render  # noqa: E402
 
 POSITIONS = HERE / "positions.txt"
 
-DEFAULT_ITERATIONS = 10
+DEFAULT_ITERATIONS = 1
 DEFAULT_DT = 1
 
 
@@ -75,12 +75,8 @@ def relax(positions, edges, iterations, dt):
     edge_indices = [(index[a], index[b]) for a, b in edges]
     n = len(pos)
 
-    # The root (the empty board) is pinned at the origin forever: every other
-    # node's coordinates are relative to it, so nothing else about "the
-    # spread" means anything if the root itself is free to drift.
     root_index = index.get("")
-    if root_index is not None:
-        pos[root_index] = [0.0, 0.0, 0.0]
+    crown_index = index.get("44444")
 
     for step in range(iterations):
         force = [[0.0, 0.0, 0.0] for _ in range(n)]
@@ -102,8 +98,10 @@ def relax(positions, edges, iterations, dt):
             pos[i][1] += force[i][1] * dt
             pos[i][2] += force[i][2] * dt
 
-        if root_index is not None:
-            pos[root_index] = [0.0, 0.0, 0.0]
+        # The root (the empty board) is pinned at the origin
+        # Also pin the crown at the top
+        pos[root_index] = [0.0, 0.0, 0.0]
+        pos[crown_index] = [0.0, 144.0, 0.0]
 
         print(f"spread progress: {step + 1}/{iterations} iterations", file=sys.stderr)
 
@@ -111,46 +109,31 @@ def relax(positions, edges, iterations, dt):
 
 
 def write_positions(path, board_to_xyz):
-    lines = []
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        if not raw.strip() or raw.startswith("#"):
-            lines.append(raw)
-            continue
-        position = raw.split(",", 1)[0]
-        key = solution.board_key(position)
-        if key in board_to_xyz:
-            x, y, z = board_to_xyz[key]
-        elif mirror_key(key) in board_to_xyz:
-            x, y, z = board_to_xyz[mirror_key(key)]
-            x = -x
-        else:
-            # Not part of the current (deduped) graph at all: nothing moved
-            # it, so its old coordinates are kept as-is.
-            lines.append(raw)
-            continue
-        lines.append(f"{position},{repr(x)},{repr(y)},{repr(z)}")
     # newline="" keeps Windows from translating these to CRLF. The file is
     # marked -text in .gitattributes, so git stores whatever it is given, and a
     # coordinate change from a Windows machine would otherwise arrive with
     # every line of the file rewritten underneath it.
     with open(path, "w", encoding="utf-8", newline="") as handle:
-        handle.write("\n".join(lines) + "\n")
+        handle.write("# 3d layout of the graph.\n")
+        handle.write("# Machine-written by spread_graph.py, do not hand-edit.\n")
+        handle.write("# One line per node: position,x,y,z\n")
+        for position in board_to_xyz:
+            x, y, z = board_to_xyz[position]
+            handle.write(f"\n{position},{repr(x)},{repr(y)},{repr(z)}")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--dt", type=float, default=DEFAULT_DT)
-    parser.add_argument("--positions", type=Path, default=POSITIONS)
     args = parser.parse_args()
 
     positions, edges = load_graph()
     print(f"loaded {len(positions):,} nodes and {len(edges):,} edges", file=sys.stderr)
     relaxed = relax(positions, edges, args.iterations, args.dt)
 
-    board_to_xyz = {solution.board_key(name): xyz for name, xyz in relaxed.items()}
-    write_positions(args.positions, board_to_xyz)
-    print(f"wrote {args.positions}", file=sys.stderr)
+    write_positions(POSITIONS, relaxed)
+    print(f"wrote {POSITIONS}", file=sys.stderr)
 
 
 if __name__ == "__main__":
