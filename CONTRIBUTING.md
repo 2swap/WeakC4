@@ -29,9 +29,13 @@ row first, separated by blank lines:
   identifier.
 - A `|` means different things on different rows. On an odd row it is a
   claimodd and can be played. On an even row it can never be played, and its
-  only effect is to stop that cell being a claimeven, which is what a `.` there
-  would mean. So a run of bars down a column is usually one claimodd plus the
-  cells it suppresses, not several claimodds.
+  only effect is to stop that cell being a claimeven. `.` is the mirror of
+  this, playable on an even row and silent on an odd one, so neither character
+  is a blank.
+- A run of bars therefore marks the whole column as claimodd, each odd-row bar
+  becoming playable as the column fills to that height, with the even-row bars
+  between them suppressing the claimevens. Most such columns hold several
+  claimodds rather than one.
 - Write claimeven as `.`, not a space. A trailing space is invisible and gets
   stripped by editors, which would silently shorten a row.
 - Only one of each mirror-equivalent pair is stored. The other orientation is
