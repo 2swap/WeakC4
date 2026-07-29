@@ -129,7 +129,12 @@ def write_positions(path, board_to_xyz):
             lines.append(raw)
             continue
         lines.append(f"{position},{repr(x)},{repr(y)},{repr(z)}")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # newline="" keeps Windows from translating these to CRLF. The file is
+    # marked -text in .gitattributes, so git stores whatever it is given, and a
+    # coordinate change from a Windows machine would otherwise arrive with
+    # every line of the file rewritten underneath it.
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        handle.write("\n".join(lines) + "\n")
 
 
 def main():
