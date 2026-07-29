@@ -150,7 +150,7 @@ def build_graph(branches_path, entries_path, positions_path):
             board[row][col] = 2
             won = solution.makes_four(board, col, row, 2)
             after_key = tuple(tuple(r) for r in board)
-            covered = red_lookup(after_key) is not None or is_leaf(after_key)
+            covered = not won and (red_lookup(after_key) is not None or is_leaf(after_key))
             excused = not won and any(solution._red_wins_now(board, c) for c in range(BOARD_W))
             board[row][col] = 0
             if covered:
