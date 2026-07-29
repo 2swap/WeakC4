@@ -13,9 +13,10 @@ root. A Red-to-move board with no entry in either file needs neither, because
 Red already has an immediate win there; such boards are simply not rendered,
 since there is nothing further to click through to.
 
-3D layout comes from solution/positions.txt, which still has one entry per
-board of the original (undeduped) graph. A board only reachable in its mirror
-orientation borrows its mirror twin's coordinates, with x negated.
+3D layout comes from representations/webclient/positions.txt, which still has
+one entry per board of the original (undeduped) graph. A board only reachable
+in its mirror orientation borrows its mirror twin's coordinates, with x
+negated.
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ import validate_solution as solution  # noqa: E402
 HERE = Path(__file__).resolve().parent
 BRANCHES = SOLUTION_DIR / "branches.txt"
 STEADY_STATES = SOLUTION_DIR / "steady_states.txt"
-POSITIONS = SOLUTION_DIR / "positions.txt"
+POSITIONS = HERE / "positions.txt"
 OUT_JS = HERE / "graph.js"
 
 BOARD_H, BOARD_W, GAME_NAME = solution.ROWS, solution.COLS, "c4"
@@ -150,7 +151,7 @@ def build_graph(branches_path, entries_path, positions_path):
             board[row][col] = 2
             won = solution.makes_four(board, col, row, 2)
             after_key = tuple(tuple(r) for r in board)
-            covered = red_lookup(after_key) is not None or is_leaf(after_key)
+            covered = not won and (red_lookup(after_key) is not None or is_leaf(after_key))
             excused = not won and any(solution._red_wins_now(board, c) for c in range(BOARD_W))
             board[row][col] = 0
             if covered:

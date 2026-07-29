@@ -1,9 +1,9 @@
-"""Print basic statistics about the three solution/ source files.
+"""Print basic statistics about the solution and about how the graph is drawn.
 
     python solution/print_statistics.py
 
-Reads positions.txt, steady_states.txt and branches.txt independently; each
-section below stands on its own.
+Reads the webclient's positions.txt, then steady_states.txt and branches.txt,
+each independently; the sections below stand on their own.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 import validate_solution as solution
 
 HERE = Path(__file__).resolve().parent
-POSITIONS = HERE / "positions.txt"
+POSITIONS = HERE.parent / "representations" / "webclient" / "positions.txt"
 STEADY_STATES = HERE / "steady_states.txt"
 BRANCHES = HERE / "branches.txt"
 

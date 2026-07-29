@@ -496,6 +496,13 @@ def check_graph(branches_path, entries_path, jobs):
             yellow_board[y][x] = 2
             won = makes_four(yellow_board, x, y, 2)
             after_key = tuple(tuple(row) for row in yellow_board)
+            # A reply that wins refutes the branch outright, so it has to be
+            # rejected before anything else is consulted. An entry for the board
+            # it leaves behind describes a game that is already over.
+            if won:
+                yellow_board[y][x] = 0
+                report(child, f"Yellow wins with the reply in column {x + 1}")
+                continue
             if red_lookup(after_key) is not None or is_leaf(after_key):
                 yellow_board[y][x] = 0
                 stack.append(after_key)
@@ -503,7 +510,7 @@ def check_graph(branches_path, entries_path, jobs):
             # only excusable reason to omit a reply: it hands Red an instant win.
             # Checked with Yellow's stone still on the board, since that move is
             # exactly what creates Red's winning reply.
-            excused = not won and any(_red_wins_now(yellow_board, c) for c in range(COLS))
+            excused = any(_red_wins_now(yellow_board, c) for c in range(COLS))
             yellow_board[y][x] = 0
             if not excused:
                 report(child, f"Yellow reply in column {x + 1} is uncovered")
