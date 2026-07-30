@@ -120,7 +120,7 @@ function drawStone(x, y, col, winningLine) {
     boardctx.fillStyle = "white";
 
     // Draw steady state markers if needed
-    const ss = String.fromCharCode(nodes[hash].data.ss[5 - y][x]);
+    const ss = nodes[hash].data.ss[5 - y].charAt(x);
     if (ss !== '1' && ss !== '2') {
         boardctx.fillText(ss, px, py + 9);
     }
@@ -260,7 +260,7 @@ function querySteadyState(boardArr, steadyState) {
 
     // Decode steady state character to priority
     function decodePriority(c) {
-        switch (String.fromCharCode(c)) {
+        switch (c) {
             case '@': return 'miai';
             case ' ': case '.': return 'claimeven';
             case '|': return 'claimodd';
@@ -270,7 +270,7 @@ function querySteadyState(boardArr, steadyState) {
             case '1': return 'red';
             case '2': return 'yellow';
             case '!': return 'urgent';
-            default: throw new Error(`Invalid character in steadyState: ${String.fromCharCode(c)}`);
+            default: throw new Error(`Invalid character in steadyState: ${c}`);
         }
     }
 
@@ -297,7 +297,7 @@ function querySteadyState(boardArr, steadyState) {
             y = getColumnState(x);
             if(y == -1) continue;
             y = 5-y;
-            const ch = steadyState[y][x];
+            const ch = steadyState[y].charAt(x);
             if (decodePriority(ch) === priority) {
                 // Handle special cases
                 if (priority === 'miai') {

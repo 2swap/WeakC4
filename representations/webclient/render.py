@@ -36,7 +36,7 @@ POSITIONS = HERE / "positions.txt"
 OUT_JS = HERE / "graph.js"
 
 BOARD_H, BOARD_W, GAME_NAME = solution.ROWS, solution.COLS, "c4"
-BLANK_SS = [[32] * BOARD_W for _ in range(BOARD_H)]
+BLANK_SS = ["       " for _ in range(BOARD_H)]
 
 
 def mirror_key(key):
