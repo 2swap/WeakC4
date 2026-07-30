@@ -358,8 +358,10 @@ def check_yellow_children(branches, steady_states):
                 continue
             child = [row[:] for row in board]
             child[y][x] = 2
+            # Red's committed move lost the game, so nothing below matters.
             if makes_four(child, x, y, 2):
-                continue
+                raise AssertionError([position, rmove, ymove,
+                                      "Yellow wins the game with this reply"])
             child_key = tuple(tuple(row) for row in child)
             canon = min(child_key, mirror_key(child_key))
 
