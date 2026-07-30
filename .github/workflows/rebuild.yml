@@ -43,35 +43,6 @@ jobs:
       - name: Verify the whole graph
         run: python solution/validate_solution.py | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Decide what changed
-        env:
-          BEFORE: ${{ github.event.before }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$BEFORE" ] \
-             || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            echo "manually triggered (or no prior commit to diff against): rendering everything"
-            echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
-            echo "RENDER_PROTOBUF=1" >> "$GITHUB_ENV"
-          else
-            changed=$(git diff --name-only "$BEFORE" HEAD)
-            echo "$changed"
-
-            # A representation's render.py always reads solution/branches.json
-            # and solution/steady_states.json, so a change to either can break
-            # any representation; a change only inside one representation's
-            # own directory can only break that one.
-            if grep -qE '^solution/(branches|steady_states)\.json$' <<<"$changed"; then
-              echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
-              echo "RENDER_PROTOBUF=1" >> "$GITHUB_ENV"
-            fi
-            if grep -q '^representations/webclient/' <<<"$changed"; then
-              echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
-            fi
-            if grep -q '^representations/protobuf/' <<<"$changed"; then
-              echo "RENDER_PROTOBUF=1" >> "$GITHUB_ENV"
-            fi
-          fi
-
       - name: Render webclient
         if: env.RENDER_WEBCLIENT == '1'
         run: python representations/webclient/render.py
