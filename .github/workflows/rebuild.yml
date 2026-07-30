@@ -44,11 +44,9 @@ jobs:
         run: python solution/validate_solution.py | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Render webclient
-        if: env.RENDER_WEBCLIENT == '1'
         run: python representations/webclient/render.py
 
       - name: Render protobuf
-        if: env.RENDER_PROTOBUF == '1'
         run: python representations/protobuf/render.py
 
       - name: Commit if changed
