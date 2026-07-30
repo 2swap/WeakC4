@@ -418,6 +418,11 @@ def main():
                         help="parallel processes (default: one per core)")
     args = parser.parse_args()
 
+    # On Windows stdout falls back to the ANSI codepage whenever it is not a
+    # console (a pipe, a redirect, Git Bash), and cp1252 cannot encode the
+    # marks the table below is drawn with.
+    sys.stdout.reconfigure(encoding="utf-8")
+
     jobs = args.jobs or (os.cpu_count() or 1)
     started = time.time()
 
