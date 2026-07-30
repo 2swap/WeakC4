@@ -4,7 +4,7 @@
     python render.py --check    # fail if the committed graph.js is stale
     python render.py --report   # print node counts as JSON, write nothing
 
-solution/branches.txt and solution/steady_states.txt only record what a Red
+solution/branches.json and solution/steady_states.json only record what a Red
 node commits to and what a leaf's diagram is (see solution/validate_solution.py
 for why). Everything else - Yellow's covered replies, and the mirror twin of
 any node that was deduped away - is re-derived here exactly as
@@ -30,8 +30,8 @@ sys.path.insert(0, str(SOLUTION_DIR))
 import validate_solution as solution  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-BRANCHES = SOLUTION_DIR / "branches.txt"
-STEADY_STATES = SOLUTION_DIR / "steady_states.txt"
+BRANCHES = SOLUTION_DIR / "branches.json"
+STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 POSITIONS = HERE / "positions.txt"
 OUT_JS = HERE / "graph.js"
 
@@ -64,8 +64,14 @@ def lookup_coords(coords, key):
 
 
 def build_graph(branches_path, entries_path, positions_path):
-    red = solution.load_branches(branches_path)
-    leaves = solution.load_leaves(entries_path)
+    with open(branches_path, "r") as f:
+        pre = json.load(f)
+        red = {}
+        for bs, move in pre.items():
+            red[solution.board_key(bs)] = move
+    with open(entries_path, "r") as f:
+        raw_leaves = json.load(f)
+        leaves = {solution.board_key_from_diagram(diagram): diagram for diagram in raw_leaves}
     coords = load_positions(positions_path)
 
     def is_leaf(key):
@@ -77,19 +83,16 @@ def build_graph(branches_path, entries_path, positions_path):
         return solution.mirror_diagram(leaves[mirror_key(key)])
 
     def red_lookup(key):
-        """(position, child) for a Red board, reflecting branches.txt's own
+        """Red's move at this board, reflecting branches.json's own
         mirror-equivalent representative if the board is only stored under
-        its mirror image. Mirrors validate_solution.check_graph.
+        its mirror image. Mirrors validate_solution.check_yellow_children.
         """
         if key in red:
             return red[key]
-        mirror_entry = red.get(mirror_key(key))
-        if mirror_entry is None:
+        mirror_move = red.get(mirror_key(key))
+        if mirror_move is None:
             return None
-        rep_position, rep_child = mirror_entry
-        position = solution.mirror_position(rep_position)
-        move = str(8 - int(rep_child[-1]))
-        return position, position + move
+        return str(8 - int(mirror_move))
 
     nodes = {}
     root_key = solution.board_key("")
@@ -119,18 +122,17 @@ def build_graph(branches_path, entries_path, positions_path):
             if is_leaf(key):
                 diagram = leaf_diagram(key)
                 nodes[position] = {
-                    "data": {"ss": solution.ss_from_diagram(diagram)},
+                    "data": {"ss": diagram},
                     "neighbors": None,
                     "rep": position, "x": x, "y": y, "z": z,
                 }
                 continue
-            entry = red_lookup(key)
-            if entry is None:
+            move = red_lookup(key)
+            if move is None:
                 board = [list(row) for row in key]
                 if any(solution._red_wins_now(board, c) for c in range(BOARD_W)):
                     continue  # instant win: nothing to render past here
                 raise AssertionError(f"no branch or leaf for reachable board at {position!r}")
-            move = entry[1][-1]
             child_key = solution.board_key(position + move)
             child_position = name_for(child_key, position + move)
             nodes[position] = {

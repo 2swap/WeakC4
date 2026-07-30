@@ -44,7 +44,7 @@ jobs:
           # webclient/ also holds the scripts that generate the page and the
           # layout file they work on, none of which the browser fetches.
           rm -rf _site/render.py _site/spread_graph.py _site/__pycache__ \
-                 _site/positions.txt _site/old_positions.txt
+                 _site/positions.txt
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

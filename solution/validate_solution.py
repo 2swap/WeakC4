@@ -1,14 +1,21 @@
-"""Check the solution documented in branches.txt and steady_states.txt.
+"""Check the solution documented in branches.json and steady_states.json.
 
 This file is the machine-readable definition of "valid solution" for this repository.
 
 Specifically, we check that:
-- All steady states pass validation.
-- The graph contains the empty board.
-- All red-to-move nodes either point to one neighbor or reflect a steady state.
-- All yellow-to-move nodes have all valid children in the graph, except those which expose an immediate red win.
-- No steady states are extraneous/unreachable in the solution.
-- No branch entries are extraneous/unreachable in the solution.
+(0) JSON structure of steady_states.json is valid
+(1) JSON structure of branches.json is valid
+(2) branches.json contains the empty board
+(3) No two steady states start from the same board, or mirror boards.
+(4) No two branch entries start from the same board, or mirror boards.
+(5) For each yellow-to-move node, all children satisfy exactly one of the following:
+    (a) being present as a key in branches,
+    (b) being a steady state,
+    (c) red is able to win on the next move.
+[During step 6, compute coverage over the branches keyset and steadystate boardset]
+(6) No branch entries are extraneous/unreachable in the solution.
+(7) No steady states are extraneous/unreachable in the solution.
+(8) All steady states pass validation.
 """
 from __future__ import annotations
 
@@ -24,17 +31,15 @@ from pathlib import Path
 sys.setrecursionlimit(100_000)
 ROWS, COLS = 6, 7
 
-# CLAIMEVEN is two characters because it is tested by membership: the graph
-# stores claimeven as a space, the contribution file writes it as a dot.
-MIAI, CLAIMEVEN, CLAIMODD = "@", " .", "|"
+MIAI, CLAIMEVEN, CLAIMODD = "@", " ", "|"
 PLUS, EQUAL, MINUS, URGENT = "+", "=", "-", "!"
 STONES = "12"
 MARKERS = MIAI + CLAIMEVEN + CLAIMODD + PLUS + EQUAL + MINUS + URGENT
 KNOWN = set(MARKERS + STONES)
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_BRANCHES = HERE / "branches.txt"
-DEFAULT_ENTRIES = HERE / "steady_states.txt"
+BRANCHES = HERE / "branches.json"
+STEADY_STATES = HERE / "steady_states.json"
 
 
 # --------------------------------------------------------------------------
@@ -86,7 +91,7 @@ def mirror_diagram(diagram):
 def board_from_diagram(diagram):
     """The stones a diagram draws, as a board[y][x] (y=0 bottom row).
 
-    A diagram is the only record of its board now that steady_states.txt
+    A diagram is the only record of its board now that steady_states.json
     keeps one representative per mirror-equivalent pair (see
     dedupe_mirrors.py) and stores no position string at all: many move
     sequences, and now also both mirror images, can lead to the same board.
@@ -160,7 +165,7 @@ def verify_leaf(diagram):
     Depends on nothing but the diagram, which is why a diagram already in the
     graph never needs rechecking when a different one is added. The board it
     starts from is the diagram's own stones, not a position string: a diagram
-    is the only record of its board now that steady_states.txt keeps one
+    is the only record of its board now that steady_states.json keeps one
     representative per mirror-equivalent pair and carries no position at all.
     """
     memo = {}
@@ -208,14 +213,6 @@ def verify_leaf(diagram):
     return red_turn(board)
 
 
-def verify_all(diagrams, jobs):
-    """Verify a list of diagrams, optionally across processes."""
-    if jobs > 1 and len(diagrams) > 1:
-        with multiprocessing.Pool(jobs) as pool:
-            return pool.map(verify_leaf, diagrams, chunksize=8)
-    return [verify_leaf(diagram) for diagram in diagrams]
-
-
 # --------------------------------------------------------------------------
 # graph and entry-file I/O
 # --------------------------------------------------------------------------
@@ -224,134 +221,18 @@ def board_key(position):
     return tuple(tuple(row) for row in board_from_position(position))
 
 
+def mirror_key(key):
+    return tuple(row[::-1] for row in key)
+
+
 def load_branches(path):
-    """branches.txt -> {board_key: (position, committed_move_position)}.
-
-    Only Red-to-move nodes are stored (see filter_branches.py); Yellow's
-    replies are forced by the rules of the game rather than chosen, so they
-    are re-derived on demand instead of being carried as data. Each line is
-    `<position>-><move>` (see migrate_branches_format.py); the committed move
-    position is simply position + move, since replaying one more move on top
-    of a valid position always reaches the right board regardless of how any
-    differently-ordered transposition elsewhere spells the same board.
-    """
-    red = {}
-    path = Path(path)
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    for number, raw in enumerate(text.splitlines(), start=1):
-        if not raw.strip() or raw.startswith("#"):
-            continue
-        if "->" not in raw:
-            raise ValueError(
-                f"{path.name}:{number}: expected '<position>-><move>', got {raw!r}"
-            )
-        position, move = raw.split("->", 1)
-        # `in` on a str is a substring test, so the length check is what stops
-        # "12" and "" from passing as a single column.
-        if len(move) != 1 or move not in "1234567":
-            raise ValueError(
-                f"{path.name}:{number}: move must be a single digit 1-7, got {move!r}"
-            )
-        key = board_key(position)
-        if key in red:
-            raise ValueError(f"{path.name}:{number}: duplicate board at {position!r}")
-        red[key] = (position, position + move)
-    return red
+    with open(path, "r") as f:
+        return json.load(f)
 
 
-def load_leaves(path):
-    """steady_states.txt -> {board_key_from_diagram(diagram): diagram}.
-
-    No position string is stored: steady_states.txt keeps one representative
-    per mirror-equivalent pair (see dedupe_mirrors.py), and many move
-    sequences can reach the same board besides, so a diagram's own stones are
-    the only reliable way to identify which board it belongs to.
-    """
-    path = Path(path)
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    entries = parse_entries(text, source=path.name)
-    leaves = {}
-    for diagram, number in entries:
-        key = board_key_from_diagram(diagram)
-        if key in leaves:
-            raise ValueError(f"{path.name}:{number}: diagram repeats an earlier board")
-        leaves[key] = diagram
-    return leaves
-
-
-def diagram_from_ss(ss):
-    """Graph representation (rows of ordinals, top row first) -> list of str."""
-    return ["".join(chr(value) for value in row) for row in ss]
-
-
-def ss_from_diagram(diagram):
-    """List of str -> graph representation. '.' is normalized to a space."""
-    return [[ord(" " if ch == "." else ch) for ch in row] for row in diagram]
-
-
-def parse_entries(text, source="steady_states.txt"):
-    """Parse the diagram file: blocks of six grid rows, top row first.
-
-    Blank lines and '#' comments are ignored between blocks. There is no
-    position line: a diagram's own stones are its board, since one diagram
-    can serve several move sequences and steady_states.txt keeps only one
-    representative per mirror-equivalent pair (see dedupe_mirrors.py).
-    Returns [(diagram, line_number)]. Raises ValueError with a line number on
-    any format error, including two diagrams that draw the same board.
-    """
-    lines = []
-    for number, raw in enumerate(text.splitlines(), start=1):
-        # Trailing spaces are kept, because a space is a legal claimeven and a
-        # row ending in one must be reported rather than silently becoming
-        # short. A stripped comment, though, leaves whitespace that was never the
-        # contributor's, so drop that.
-        content, hash_mark, _ = raw.partition("#")
-        content = content.rstrip() if hash_mark else content.rstrip("\r\n")
-        if content.strip():
-            lines.append((number, content))
-
-    entries = []
-    index = 0
-    while index < len(lines):
-        first_number = lines[index][0]
-        if len(lines) - index < ROWS:
-            raise ValueError(
-                f"{source}:{first_number}: fewer than {ROWS} grid rows remain"
-            )
-        diagram = []
-        for offset in range(ROWS):
-            row_number, row = lines[index + offset]
-            if " " in row:
-                raise ValueError(
-                    f"{source}:{row_number}: write claimeven as '.', not a space "
-                    "(trailing spaces are invisible and get stripped)"
-                )
-            if len(row) != COLS:
-                raise ValueError(
-                    f"{source}:{row_number}: grid row must be exactly {COLS} "
-                    f"characters, got {len(row)} ({row!r})"
-                )
-            unknown = set(row) - KNOWN
-            if unknown:
-                raise ValueError(
-                    f"{source}:{row_number}: unknown characters {sorted(unknown)}"
-                )
-            diagram.append(row)
-        entries.append((diagram, first_number))
-        index += ROWS
-
-    # Keyed by the board the diagram draws, not by position: there is no
-    # position here to key by, and this is the only way to notice two
-    # diagrams that describe the same board.
-    seen = {}
-    for diagram, number in entries:
-        key = board_key_from_diagram(diagram)
-        if key in seen:
-            raise ValueError(
-                f"{source}:{number}: diagram repeats the board from line {seen[key]}"
-            )
-        seen[key] = number
-    return entries
+def load_steady_states(path):
+    with open(path, "r") as f:
+        return json.load(f)
 
 
 def board_has_four(board):
@@ -363,22 +244,6 @@ def board_has_four(board):
     return False
 
 
-def entry_problem(diagram):
-    """Check a diagram is a sane place to plant a steady state; message or None.
-
-    There is no position to cross-check the stones against any more: the
-    diagram's own stones are its board (see board_from_diagram).
-    """
-    board = board_from_diagram(diagram)
-    if board_has_four(board):
-        return "the game is already over at this board"
-    return None
-
-
-# --------------------------------------------------------------------------
-# modes
-# --------------------------------------------------------------------------
-
 def _red_wins_now(board, x):
     y = col_height(board, x)
     if y >= ROWS:
@@ -389,272 +254,239 @@ def _red_wins_now(board, x):
     return won
 
 
-def check_graph(branches_path, entries_path, jobs):
-    """Structural integrity of solution/, plus an exhaustive check of every
-    diagram leaf. Combinatorial: no search, no solver.
+# --------------------------------------------------------------------------
+# checks 0-8
+# --------------------------------------------------------------------------
 
-    branches.txt only records Red's committed moves (see filter_branches.py);
-    Yellow's replies are forced by the rules of the game, not chosen, so they
-    are re-derived here by enumerating Yellow's legal moves rather than read
-    from a file. Together with a verified diagram at every leaf, this IS the
-    proof that Red wins: Red commits to one legal move, Yellow's replies are
-    all covered except the ones that hand Red an immediate win, and every line
-    ends in a diagram that wins. Nothing here needs to know whether a move is
-    objectively best; the subtree below it is its own certificate.
-    """
-    red = load_branches(branches_path)
-    leaves = load_leaves(entries_path)
+def check_steady_state_json_valid(steady_states):
+    """(0) JSON structure of steady_states.json is valid."""
+    if not isinstance(steady_states, list):
+        raise ValueError("steady_states.json must be a JSON array")
+    for i, diagram in enumerate(steady_states):
+        if not isinstance(diagram, list) or len(diagram) != ROWS:
+            raise ValueError(
+                f"steady_states.json[{i}]: expected a list of {ROWS} rows, got {diagram!r}"
+            )
+        for row in diagram:
+            if not isinstance(row, str) or len(row) != COLS:
+                raise ValueError(
+                    f"steady_states.json[{i}]: each row must be a {COLS}-character "
+                    f"string, got {row!r}"
+                )
+            unknown = set(row) - KNOWN
+            if unknown:
+                raise ValueError(
+                    f"steady_states.json[{i}]: unknown characters {sorted(unknown)}"
+                )
 
-    def mirror_key(key):
-        return tuple(row[::-1] for row in key)
 
-    def canon(key):
-        return min(key, mirror_key(key))
+def check_branches_json_valid(branches):
+    """(1) JSON structure of branches.json is valid."""
+    if not isinstance(branches, dict):
+        raise ValueError("branches.json must be a JSON object")
+    for position, move in branches.items():
+        if not isinstance(move, str) or move not in "1234567":
+            raise ValueError(
+                f"branches.json[{position!r}]: move must be one of '1'-'7', got {move!r}"
+            )
+        if len(position) % 2:
+            raise ValueError(
+                f"branches.json: position {position!r} is Yellow to move; branches "
+                "are only defined for Red to move (even length)"
+            )
+        try:
+            board_from_position(position)
+        except ValueError:
+            raise ValueError(
+                f"branches.json: position {position!r} overflows a column"
+            ) from None
 
-    def is_leaf(key):
-        # steady_states.txt keeps only one representative per mirror-equivalent
-        # pair (see dedupe_mirrors.py), so the mirror image of a stored leaf is
-        # just as much a leaf even though it has no entry of its own.
-        return key in leaves or mirror_key(key) in leaves
 
-    def red_lookup(key):
-        """(position, child) for a Red board, reflecting branches.txt's own
-        mirror-equivalent representative (see migrate_branches_format.py) if
-        the board is only stored under its mirror image.
-        """
-        if key in red:
-            return red[key]
-        mirror_entry = red.get(mirror_key(key))
-        if mirror_entry is None:
-            return None
-        rep_position, rep_child = mirror_entry
-        position = mirror_position(rep_position)
-        move = str(8 - int(rep_child[-1]))
-        return position, position + move
+def check_branches_contains_empty_board(branches):
+    """(2) branches.json contains the empty board."""
+    if "" not in branches:
+        raise AssertionError("branches.json does not contain the empty board (the root)")
 
-    def label(diagram):
-        return "/".join(diagram)
 
+def check_steady_states_unique(steady_states):
+    """(3) No two steady states start from the same board, or mirror boards."""
+    seen = {}
     failures = []
+    for i, diagram in enumerate(steady_states):
+        canon = min(board_key_from_diagram(diagram), mirror_key(board_key_from_diagram(diagram)))
+        if canon in seen:
+            failures.append([i, f"duplicates the board at index {seen[canon]} (up to mirroring)"])
+        else:
+            seen[canon] = i
+    return failures
 
-    def report(identifier, message):
-        print(f"FAILURE: {identifier}: {message}", file=sys.stderr)
-        failures.append([identifier, message])
 
-    for key in red:
-        if is_leaf(key):
-            report(red[key][0], "position is both a branch and a leaf")
+def check_branches_unique(branches):
+    """(4) No two branch entries start from the same board, or mirror boards."""
+    seen = {}
+    failures = []
+    for position in branches:
+        key = board_key(position)
+        canon = min(key, mirror_key(key))
+        if canon in seen:
+            failures.append(
+                [position, f"duplicates the board at {seen[canon]!r} (up to mirroring)"]
+            )
+        else:
+            seen[canon] = position
+    return failures
 
-    root_key = board_key("")
-    if red_lookup(root_key) is None:
-        raise AssertionError("the root (empty board) is not a Red branching node")
 
-    # A single traversal proves reachability, edge legality, and Yellow
-    # coverage together: any board this walk cannot reach or explain is a
-    # structural failure, and nothing outside this walk is part of the proof.
-    seen = set()
-    stack = [root_key]
-    while stack:
-        key = stack.pop()
-        if key in seen:
-            continue
-        seen.add(key)
-        if is_leaf(key):
-            continue
-        entry = red_lookup(key)
-        if entry is None:
-            # Neither a branch nor a leaf is required at a Red-to-move node
-            # where Red can just win on the spot; there is nothing to commit
-            # to or prove beyond that.
-            board = [list(row) for row in key]
-            if any(_red_wins_now(board, x) for x in range(COLS)):
-                continue
-            report(None, f"board reachable from root has no entry: {key}")
-            continue
+def check_yellow_children(branches, steady_states):
+    used_branches = set()
+    used_steady_states = set()
+    steady_keys = {board_key_from_diagram(diagram): i for i, diagram in enumerate(steady_states)}
+    steady_canon = {}
+    for key, i in steady_keys.items():
+        steady_canon[min(key, mirror_key(key))] = i
+    branch_canon = {}
+    for p in branches:
+        key = board_key(p)
+        branch_canon[min(key, mirror_key(key))] = p
 
-        position, child = entry
-        board = board_from_position(position)
-        legal = set()
-        for x in range(COLS):
+    for position, rmove in branches.items():
+        board = board_from_position(position + rmove)
+        for ymove in '1234567':
+            x = int(ymove) - 1
             y = col_height(board, x)
             if y >= ROWS:
                 continue
-            board[y][x] = 1
-            legal.add(tuple(tuple(row) for row in board))
-            board[y][x] = 0
-
-        child_key = board_key(child)
-        if child_key not in legal:
-            report(position, "edge is not a single legal Red move")
-            continue
-
-        yellow_board = board_from_position(child)
-        for x in range(COLS):
-            y = col_height(yellow_board, x)
-            if y >= ROWS:
+            child = [row[:] for row in board]
+            child[y][x] = 2
+            if makes_four(child, x, y, 2):
                 continue
-            yellow_board[y][x] = 2
-            won = makes_four(yellow_board, x, y, 2)
-            after_key = tuple(tuple(row) for row in yellow_board)
-            # A reply that wins refutes the branch outright, so it has to be
-            # rejected before anything else is consulted. An entry for the board
-            # it leaves behind describes a game that is already over.
-            if won:
-                yellow_board[y][x] = 0
-                report(child, f"Yellow wins with the reply in column {x + 1}")
-                continue
-            if red_lookup(after_key) is not None or is_leaf(after_key):
-                yellow_board[y][x] = 0
-                stack.append(after_key)
-                continue
-            # only excusable reason to omit a reply: it hands Red an instant win.
-            # Checked with Yellow's stone still on the board, since that move is
-            # exactly what creates Red's winning reply.
-            excused = any(_red_wins_now(yellow_board, c) for c in range(COLS))
-            yellow_board[y][x] = 0
-            if not excused:
-                report(child, f"Yellow reply in column {x + 1} is uncovered")
+            child_key = tuple(tuple(row) for row in child)
+            canon = min(child_key, mirror_key(child_key))
 
-    # A branch or leaf may be visited only in its mirror orientation, since its
-    # twin was dropped from branches.txt/steady_states.txt, so compare
-    # canonical (mirror-folded) keys instead of requiring the exact stored
-    # board to have been seen.
-    seen_canon = {canon(key) for key in seen}
-    unreachable_red = [key for key in red if canon(key) not in seen_canon]
-    unreachable_leaves = [key for key in leaves if canon(key) not in seen_canon]
+            has_steady_state = canon in steady_canon
+            has_branch = canon in branch_canon
+            has_rtw = False
+            if has_steady_state:
+                used_steady_states.add(steady_canon[canon])
+            if has_branch:
+                used_branches.add(branch_canon[canon])
+            for rx in range(COLS):
+                if _red_wins_now(child, rx):
+                    has_rtw = True
+                    break
+            if sum(bool(v) for v in (has_branch, has_steady_state, has_rtw)) != 1:
+                raise AssertionError([position, rmove, ymove, "does not satisfy exactly one of", has_branch, has_steady_state, has_rtw])
+    return used_branches, used_steady_states
 
-    for key in unreachable_red:
-        report(red[key][0], "unreachable from root")
-    for key in unreachable_leaves:
-        report(label(leaves[key]), "unreachable from root")
 
-    items, item_labels = [], []
-    for diagram in leaves.values():
-        unknown = {ch for row in diagram for ch in row} - KNOWN
-        if unknown:
-            report(label(diagram), f"unknown diagram characters {sorted(unknown)}")
-            continue
-        items.append(diagram)
-        item_labels.append(label(diagram))
+def check_no_extraneous_branches(branches, used_branches):
+    failures = []
+    for position in branches:
+        if position != "" and position not in used_branches:
+            failures.append([position, "branch is extraneous/unreachable"])
+    return failures
 
-    verdicts = verify_all(items, jobs)
-    for item_label, ok in zip(item_labels, verdicts):
+
+def check_no_extraneous_steady_states(steady_states, used_steady_states):
+    failures = []
+    for i in range(len(steady_states)):
+        if i not in used_steady_states:
+            failures.append([i, "steady state is extraneous/unreachable"])
+    return failures
+
+
+def check_steady_states_correct(steady_states, jobs):
+    """(8) All steady states pass validation."""
+    if jobs > 1 and len(steady_states) > 1:
+        with multiprocessing.Pool(jobs) as pool:
+            verdicts = pool.map(verify_leaf, steady_states, chunksize=8)
+    else:
+        verdicts = [verify_leaf(diagram) for diagram in steady_states]
+
+    failures = []
+    for i, ok in enumerate(verdicts):
         if not ok:
-            report(item_label, "diagram fails against some Yellow line")
-
-    return {
-        "mode": "graph",
-        "nodes": len(red) + len(leaves),
-        "diagram_leaves_verified": sum(verdicts),
-        "failures": failures[:20],
-        "failure_count": len(failures),
-    }
-
-
-def check_entries(entries_path, branches_path, jobs, baseline_path=None):
-    path = Path(entries_path)
-    entries = parse_entries(
-        path.read_text(encoding="utf-8") if path.exists() else "", source=path.name
-    )
-
-    skipped = 0
-    if baseline_path is not None:
-        baseline = Path(baseline_path)
-        unchanged = {
-            tuple(diagram)
-            for diagram, _line in parse_entries(
-                baseline.read_text(encoding="utf-8") if baseline.exists() else "",
-                source=baseline.name,
-            )
-        }
-        before = len(entries)
-        entries = [e for e in entries if tuple(e[0]) not in unchanged]
-        skipped = before - len(entries)
-
-    # Keyed by board, not by a move string: there is no position here to key
-    # by, and branches.txt itself only keys by board (see load_branches).
-    branching = set(load_branches(branches_path))
-
-    problems = [entry_problem(diagram) for diagram, _ in entries]
-    verdicts = verify_all(
-        [diagram for (diagram, _), problem in zip(entries, problems) if problem is None],
-        jobs,
-    )
-    verdicts = iter(verdicts)
-
-    results, failures = [], []
-    for (diagram, number), problem in zip(entries, problems):
-        if problem is None and not next(verdicts):
-            problem = "diagram fails against some Yellow line"
-        results.append({
-            "line": number,
-            "valid": problem is None,
-            "reduces": board_key_from_diagram(diagram) in branching,
-        })
-        if problem:
-            print(f"FAILURE: line {number}: {problem}", file=sys.stderr)
-            failures.append([number, problem])
-
-    return {
-        "mode": "entries",
-        "entries": len(entries),
-        "unchanged_skipped": skipped,
-        "verified": sum(1 for r in results if r["valid"]),
-        "no_reduction": [r["line"] for r in results if r["valid"] and not r["reduces"]],
-        "results": results,
-        "failures": failures[:20],
-        "failure_count": len(failures),
-    }
-
-def markdown(report):
-    out = []
-    if report["mode"] == "entries":
-        out.append("### Diagram verification\n")
-        out.append(f"**{report['verified']} of {report['entries']} new diagram(s) "
-                   f"verified**, {report['unchanged_skipped']} unchanged skipped.\n")
-        if report["failures"]:
-            out.append("| line | problem |")
-            out.append("| --- | --- |")
-            out += [f"| `{line}` | {why} |" for line, why in report["failures"]]
-            out.append("")
-        if report["no_reduction"]:
-            out.append("Valid but not branching boards of the current graph, so they "
-                       "remove nothing (line numbers): "
-                       + ", ".join(f"`{line}`" for line in report["no_reduction"][:10]) + "\n")
-    elif report["mode"] == "graph":
-        out.append("### Whole-graph check\n")
-        out.append(f"{report['nodes']:,} nodes, "
-                   f"{report['diagram_leaves_verified']:,} diagram leaves verified, "
-                   f"{report['failure_count']} failure(s).\n")
-    return "\n".join(out)
+            failures.append([i, "diagram fails against some Yellow line"])
+    return failures
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--branches", default=DEFAULT_BRANCHES, type=Path,
-                        help="branch file to check (default: solution/branches.txt)")
-    parser.add_argument("--baseline", type=Path, default=None,
-                        help="with --entries: skip entries unchanged from this file")
     parser.add_argument("--jobs", type=int, default=0, metavar="N",
                         help="parallel processes (default: one per core)")
-    parser.add_argument("--markdown", action="store_true",
-                        help="print a short report instead of JSON")
     args = parser.parse_args()
 
     jobs = args.jobs or (os.cpu_count() or 1)
     started = time.time()
-    try:
-        report = check_graph(args.branches, DEFAULT_ENTRIES, jobs)
-    except (ValueError, AssertionError) as error:
-        # Malformed entries and broken graphs are ordinary results here, not
-        # crashes: report them the way a contributor needs to read them.
-        print(f"error: {error}", file=sys.stderr)
-        sys.exit(1)
 
-    report["status"] = "OK" if not report["failure_count"] else "FAILED"
-    report["seconds"] = round(time.time() - started, 1)
-    print(markdown(report) if args.markdown else json.dumps(report, indent=2, sort_keys=True))
-    sys.exit(1 if report["failure_count"] else 0)
+    branches = load_branches(BRANCHES)
+    steady_states = load_steady_states(STEADY_STATES)
+
+    # Each check below runs independently of the others' outcome, so one
+    # failing check never hides or blocks the rest - a check either raises
+    # (ValueError/AssertionError) to report a single all-or-nothing verdict,
+    # or returns a list of individual failures to report many at once.
+    checks = []
+
+    def record(number, description, fn):
+        try:
+            result = fn()
+        except (ValueError, AssertionError) as error:
+            checks.append((number, description, False, [str(error)]))
+            return None
+        if isinstance(result, list):
+            checks.append((number, description, not result, [str(row) for row in result]))
+            return result
+        checks.append((number, description, True, []))
+        return result
+
+    record(0, "steady_states.json is structurally valid",
+           lambda: check_steady_state_json_valid(steady_states))
+    record(1, "branches.json is structurally valid",
+           lambda: check_branches_json_valid(branches))
+    record(2, "branches.json contains the empty board",
+           lambda: check_branches_contains_empty_board(branches))
+    record(3, "no two steady states share a board (up to mirroring)",
+           lambda: check_steady_states_unique(steady_states))
+    record(4, "no two branches share a board (up to mirroring)",
+           lambda: check_branches_unique(branches))
+    yellow_result = record(
+        5, "every Yellow reply is covered by exactly one of branch/steady-state/immediate-win",
+        lambda: check_yellow_children(branches, steady_states))
+    used_branches, used_steady_states = yellow_result if yellow_result is not None else (set(), set())
+    record(6, "no branch is extraneous/unreachable",
+           lambda: check_no_extraneous_branches(branches, used_branches))
+    record(7, "no steady state is extraneous/unreachable",
+           lambda: check_no_extraneous_steady_states(steady_states, used_steady_states))
+    record(8, "all steady states pass validation",
+           lambda: check_steady_states_correct(steady_states, jobs))
+
+    ok = all(passed for _, _, passed, _ in checks)
+    elapsed = time.time() - started
+
+    lines = [
+        "# Solution validation", "",
+        f"_completed in {elapsed:.1f}s_", "",
+        "| # | check | result |",
+        "|---|---|---|",
+    ]
+    for number, description, passed, _details in checks:
+        lines.append(f"| {number} | {description} | {'✅' if passed else '❌'} |")
+    for number, description, passed, details in checks:
+        if passed:
+            continue
+        lines.append("")
+        lines.append(f"<details><summary>({number}) {description} — failures</summary>")
+        lines.append("")
+        for detail in details[:50]:
+            lines.append(f"- {detail}")
+        if len(details) > 50:
+            lines.append(f"- ... and {len(details) - 50} more")
+        lines.append("")
+        lines.append("</details>")
+    print("\n".join(lines))
+
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":

@@ -13,8 +13,8 @@ on:
   push:
     branches: [main]
     paths:
-      - solution/branches.txt
-      - solution/steady_states.txt
+      - solution/branches.json
+      - solution/steady_states.json
       - representations/webclient/**
       - representations/protobuf/**
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
       - run: pip install --quiet protobuf
 
       - name: Verify the whole graph
-        run: python solution/validate_solution.py --markdown | tee -a "$GITHUB_STEP_SUMMARY"
+        run: python solution/validate_solution.py | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Decide what changed
         env:
@@ -56,11 +56,11 @@ jobs:
             changed=$(git diff --name-only "$BEFORE" HEAD)
             echo "$changed"
 
-            # A representation's render.py always reads solution/branches.txt
-            # and solution/steady_states.txt, so a change to either can break
+            # A representation's render.py always reads solution/branches.json
+            # and solution/steady_states.json, so a change to either can break
             # any representation; a change only inside one representation's
             # own directory can only break that one.
-            if grep -qE '^solution/(branches|steady_states)\.txt$' <<<"$changed"; then
+            if grep -qE '^solution/(branches|steady_states)\.json$' <<<"$changed"; then
               echo "RENDER_WEBCLIENT=1" >> "$GITHUB_ENV"
               echo "RENDER_PROTOBUF=1" >> "$GITHUB_ENV"
             fi
