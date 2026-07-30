@@ -1,0 +1,35 @@
+name: Verify contributions
+
+# Validates the whole solution/ graph before a change lands, on both events so
+# that a direct push to main is covered as well as a pull request.
+#
+# Read-only, which is what makes it safe on a fork's branch. rebuild.yml is
+# separate because pushing artifacts back needs write access, and an untrusted
+# branch must not run with that.
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A pull request from a branch here raises both events; keying on its number
+  # puts them in one group so the duplicate is cancelled.
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash   # for -o pipefail, so a failure piped through tee still fails
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: '3.12'}
+
+      - name: Verify the whole graph
+        run: python solution/validate_solution.py | tee -a "$GITHUB_STEP_SUMMARY"
