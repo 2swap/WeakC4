@@ -132,8 +132,9 @@
         </ol>
         <p>In creation of these diagrams, I provide the guarantee that there is always precisely one unique move suggested by this priority list. In other words, among the diagrams featured on my site, you will never find one where two urgents are available. This corresponds to the earlier qualification that a red-to-move node has exactly one outgoing edge.</p>
         <p>I won't discuss all the design decisions that guided me to use this specific language. To gain some intuition, I suggest you view <a href="../">the graph</a> and explore some steady state diagrams yourself.</p>
-        <p>I also don't make the claim that it is perfect, or optimal, or anything of the like. I converged on this design primarily through lots of trial and error. There are also a bunch of positions considered simple by Connect 4 experts which do not have a Steady State Diagram- chiefly among them positions which use the "triple-odds" strategy. Triple-odds requires a bit of global knowledge, which my Steady State language is too simple to express. I suspect the graph could be shrunk by a factor of 4 or so if a language was found which can simply express triple-odds.</p>
+        <p>I also don't make the claim that it is perfect, or optimal, or anything of the like. I converged on this design primarily through lots of trial and error.</p>
         <p>Take a moment to consider that there is a trade between complexity and expressiveness of the Steady State language and graph size. I chose the best balance I could manage. If you have a better idea, I encourage you to try it :)</p>
+        <p>If you'd like to check your own Steady State Diagrams for validity, waffle3z independently built a handy tool for this: <a href="https://waffle3z.github.io/weakc4lab/">Weak C4 Lab</a>.</p>
 
         <h2>Technical Approach</h2>
         <p>Briefly, here's a description of the rest of the technical approach which permitted me to generate the graph:</p>
