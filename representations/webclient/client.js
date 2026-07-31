@@ -518,6 +518,13 @@ $(document).ready(async function() {
         resizePointCloud();
         build_board_lookup_table();
 
+        // Replace the info html nodes count with the actual count. Done
+        // once (not per render frame) since resetting innerHTML tears down
+        // and rebuilds the DOM nodes, which would break the links' click
+        // handling if it happened continuously.
+        document.getElementById("info").innerHTML =
+            document.getElementById("info").innerHTML.replace(/<nodes>/g, Object.keys(nodes).length);
+
         function resizePointCloud() {
             nodes = {};
             var sqrtwh = Math.sqrt(w * h);
@@ -557,18 +564,6 @@ $(document).ready(async function() {
                 node.opacity = 1;
                 nodes[name] = node;
             }
-        }
-
-        function render_blurb(){
-            graphctx.textAlign = 'left';
-            graphctx.globalAlpha = 1;
-            var y = h - 196;
-            graphctx.fillStyle = "white";
-            graphctx.font = "16px Arial";
-            graphctx.fillText("", 20, y+=16)
-            // Replace the info html nodes count with the actual count
-            let info = document.getElementById("info");
-            info.innerHTML = info.innerHTML.replace(/<nodes>/g, Object.keys(nodes).length);
         }
 
         // Smoothed camera center, in rotated space. Eases toward the
@@ -623,7 +618,6 @@ $(document).ready(async function() {
             graphctx.textBaseline = 'bottom';
 
             render_graph();
-            render_blurb();
             document.getElementById("strongsolver").href = "https://connect4.gamesolver.org/?pos=" + nodes[hash].rep;
         }
 
