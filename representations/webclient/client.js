@@ -15,7 +15,7 @@ function get_color(name, neighbor_name){
 
 let board_arr = 0;
 
-var square_sz = 40;
+var square_sz = 52;
 var extraMoves = "";
 
 function board_to_key(board_to_hash) {
@@ -68,8 +68,8 @@ function construct_board_arr(board_string) {
 
 function render_board () {
     boardcanvas.width = parseInt(dataset.board_w) * square_sz;
-    boardcanvas.height = parseInt(dataset.board_h) * square_sz + 80;
-    boardctx.font = "24px Arial";
+    boardcanvas.height = parseInt(dataset.board_h) * square_sz + 104;
+    boardctx.font = "31px Arial";
     boardctx.textAlign = "center";
     board_arr = construct_board_arr(repstr());
 
@@ -83,19 +83,20 @@ function render_board () {
         }
     }
 
-    boardctx.font = "15px Arial";
+    boardctx.font = "20px Arial";
     boardctx.textAlign = "left";
     boardctx.fillStyle = "white";
     var dy = 0;
     if(winningLine)
-        boardctx.fillText("Press Reset to play again!", 8, (dy+=16)+square_sz * dataset.board_h);
+        boardctx.fillText("Press Reset to play again!", 10, (dy+=21)+square_sz * dataset.board_h);
     else if(extraMoves == "") {
-        boardctx.fillText("Click to play against the weak solution!", 8, (dy+=16)+square_sz * dataset.board_h);
+        boardctx.fillText("Click to play against the weak solution!", 10, (dy+=21)+square_sz * dataset.board_h);
     } else {
-        boardctx.fillText("This is a Steady State Diagram,"  , 8, (dy+=16)+square_sz * dataset.board_h);
-        boardctx.fillText("which instructs the agent to play", 8, (dy+=16)+square_sz * dataset.board_h);
-        boardctx.fillText("perfectly from here on."          , 8, (dy+=16)+square_sz * dataset.board_h);
+        boardctx.fillText("This is a Steady State Diagram,"  , 10, (dy+=21)+square_sz * dataset.board_h);
+        boardctx.fillText("which instructs the agent to play", 10, (dy+=21)+square_sz * dataset.board_h);
+        boardctx.fillText("perfectly from here on."          , 10, (dy+=21)+square_sz * dataset.board_h);
     }
+    document.getElementById('controls').style.top = (boardcanvas.height + 15) + 'px';
 }
 
 // Helper function to draw a stone
@@ -106,14 +107,14 @@ function drawStone(x, y, col, winningLine) {
 
     boardctx.fillStyle = col;
     boardctx.beginPath();
-    boardctx.arc(px, py, 18, 0, 2 * Math.PI, false);
+    boardctx.arc(px, py, 23, 0, 2 * Math.PI, false);
     boardctx.fill();
 
     // Highlight winning stones
     if (winningLine && winningLine.some(([wy, wx]) => wx === x && wy === y)) {
         boardctx.fillStyle = "gold"; // Highlight color
         boardctx.beginPath();
-        boardctx.arc(px, py, 10, 0, 2 * Math.PI, false);
+        boardctx.arc(px, py, 13, 0, 2 * Math.PI, false);
         boardctx.fill();
     }
 
@@ -122,7 +123,7 @@ function drawStone(x, y, col, winningLine) {
     // Draw steady state markers if needed
     const ss = nodes[hash].data.ss[5 - y].charAt(x);
     if (ss !== '1' && ss !== '2') {
-        boardctx.fillText(ss, px, py + 9);
+        boardctx.fillText(ss, px, py + 12);
     }
 }
 
@@ -177,6 +178,10 @@ function checkForWin(board) {
 }
 
 boardcanvas.addEventListener('click', handleClick);
+boardcanvas.addEventListener('touchend', function(event){
+    event.preventDefault();
+    handleClick(event.changedTouches[0]);
+}, {passive: false});
 
 function handleClick(event) {
     // Get the mouse click coordinates relative to the canvas
@@ -654,6 +659,7 @@ $(document).ready(async function() {
         // pinch with two pointers to zoom, tap/click a node to jump to it.
         let activePointers = new Map();
         let dragLast = null;
+        let dragStart = null;
         let pinchStartDist = null;
         let pinchStartZoom = null;
         let dragMoved = false;
@@ -668,6 +674,7 @@ $(document).ready(async function() {
             activePointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
             if (activePointers.size === 1) {
                 dragLast = {x: e.clientX, y: e.clientY};
+                dragStart = {x: e.clientX, y: e.clientY};
                 dragMoved = false;
             } else if (activePointers.size === 2) {
                 pinchStartDist = pointerDist();
@@ -684,16 +691,19 @@ $(document).ready(async function() {
                 zoom = pinchStartZoom * pinchStartDist / pointerDist();
                 render();
             } else if (activePointers.size === 1 && dragLast) {
+                // Touch fires move events far more often than mouse, each
+                // with a tiny delta, so tap-vs-drag detection is based on
+                // total distance from the drag's start, not the per-event
+                // delta. The rotation itself is applied every event so it
+                // stays smooth even when individual deltas are small.
                 const dx = e.clientX - dragLast.x;
                 const dy = e.clientY - dragLast.y;
-                if (Math.hypot(dx, dy) > 4) dragMoved = true;
-                if (dragMoved) {
-                    // Rotate about the view's current screen-space axes (a
-                    // trackball), not fixed world axes, so drag direction
-                    // always matches on-screen motion regardless of pitch.
-                    rotM = matMul3(rotX(-dy * 0.01), matMul3(rotY(dx * 0.01), rotM));
-                    render();
-                }
+                if (Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 4) dragMoved = true;
+                // Rotate about the view's current screen-space axes (a
+                // trackball), not fixed world axes, so drag direction
+                // always matches on-screen motion regardless of pitch.
+                rotM = matMul3(rotX(-dy * 0.01), matMul3(rotY(dx * 0.01), rotM));
+                render();
                 dragLast = {x: e.clientX, y: e.clientY};
             }
         }, false);
@@ -704,6 +714,7 @@ $(document).ready(async function() {
             activePointers.delete(e.pointerId);
             pinchStartDist = null;
             dragLast = null;
+            dragStart = null;
             if (wasSingleTap) {
                 var rect = graphcanvas.getBoundingClientRect();
                 var screen_coords = {
@@ -718,7 +729,18 @@ $(document).ready(async function() {
         graphcanvas.addEventListener(`pointerup`, endPointer, false);
         graphcanvas.addEventListener(`pointercancel`, endPointer, false);
 
-        document.getElementById('undo-btn').addEventListener('click', function(){
+        // Some mobile browsers are unreliable dispatching a synthetic
+        // 'click' after a tap (especially with touch-action:none active on
+        // sibling canvases), so respond directly to touchend as well.
+        function addTapListener(el, handler) {
+            el.addEventListener('click', handler);
+            el.addEventListener('touchend', function(e){
+                e.preventDefault();
+                handler(e);
+            }, {passive: false});
+        }
+
+        addTapListener(document.getElementById('undo-btn'), function(){
             if(hash_stack.length > 1) {
                 let obj = hash_stack.pop();
                 hash = obj.hash;
@@ -728,7 +750,7 @@ $(document).ready(async function() {
             on_board_change();
         });
 
-        document.getElementById('reset-btn').addEventListener('click', function(){
+        addTapListener(document.getElementById('reset-btn'), function(){
             reset_hash();
             for (const name in nodes) nodes[name].opacity = 1;
             on_board_change();

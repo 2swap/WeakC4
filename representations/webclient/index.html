@@ -22,9 +22,9 @@
           background-color: #000;
         }
         #info {
-          font-size: 14px;
+          font-size: 18px;
           color: #fff;
-          padding: 10px;
+          padding: 13px;
           border-radius: 5px;
           max-width: 410px;
           max-height: 40vh;
@@ -40,21 +40,22 @@
         }
         #controls {
           position: fixed;
-          top: 335px;
+          top: 431px;
           left: 10px;
-          z-index: 10;
+          z-index: 100;
           display: flex;
           gap: 8px;
         }
         #controls button {
-          padding: 10px 16px;
-          font-size: 14px;
+          padding: 13px 21px;
+          font-size: 18px;
           font-family: 'Arial', sans-serif;
           color: #fff;
           background-color: #337;
           border: 1px solid #77b;
           border-radius: 6px;
           cursor: pointer;
+          touch-action: manipulation;
         }
         #controls button:hover {
           background-color: #449;
@@ -66,7 +67,7 @@
         @media (max-width: 600px), (pointer: coarse) {
           #info {
             max-width: calc(100vw - 20px);
-            font-size: 12px;
+            font-size: 16px;
           }
         }
     </style>
