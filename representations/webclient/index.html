@@ -27,10 +27,47 @@
           padding: 10px;
           border-radius: 5px;
           max-width: 410px;
+          max-height: 40vh;
+          overflow-y: auto;
           position: fixed;
           bottom: 10px;
           left: 10px;
           z-index: 10;
+          -webkit-overflow-scrolling: touch;
+        }
+        canvas {
+          touch-action: none;
+        }
+        #controls {
+          position: fixed;
+          top: 335px;
+          left: 10px;
+          z-index: 10;
+          display: flex;
+          gap: 8px;
+        }
+        #controls button {
+          padding: 10px 16px;
+          font-size: 14px;
+          font-family: 'Arial', sans-serif;
+          color: #fff;
+          background-color: #337;
+          border: 1px solid #77b;
+          border-radius: 6px;
+          cursor: pointer;
+        }
+        #controls button:hover {
+          background-color: #449;
+          border-color: #bbf;
+        }
+        #controls button:active {
+          background-color: #55b;
+        }
+        @media (max-width: 600px), (pointer: coarse) {
+          #info {
+            max-width: calc(100vw - 20px);
+            font-size: 12px;
+          }
         }
     </style>
 </head>
@@ -42,22 +79,11 @@
         <div style="position: absolute; left: 0; top: 0; z-index: 1;">
             <canvas id="board"></canvas>
         </div>
+        <div id="controls">
+            <button id="undo-btn" title="Undo last move">Undo</button>
+            <button id="reset-btn" title="Reset">Reset</button>
+        </div>
         <p id="info">
-            Controls
-            <br>
-            [U] to undo the last move
-            <br>
-            [R] to reset
-            <br>
-            [WASD] rotate graph
-            <br>
-            [arrows] to pan
-            <br>
-            [O] to color nodes by their opening
-            <br>
-            [click] on a node!
-            <br>
-            <br>
             This is a low-information, search-free weak solution of Connect-4.
             With <nodes> nodes, it represents a small amount of information one may
             'memorize' in order to always win, as player 1 (red).

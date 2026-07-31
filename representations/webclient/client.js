@@ -88,7 +88,7 @@ function render_board () {
     boardctx.fillStyle = "white";
     var dy = 0;
     if(winningLine)
-        boardctx.fillText("Press 'r' to reset!", 8, (dy+=16)+square_sz * dataset.board_h);
+        boardctx.fillText("Press Reset to play again!", 8, (dy+=16)+square_sz * dataset.board_h);
     else if(extraMoves == "") {
         boardctx.fillText("Click to play against the weak solution!", 8, (dy+=16)+square_sz * dataset.board_h);
     } else {
@@ -387,7 +387,6 @@ var nodes_to_use = false;
 let nodes = false;
 var hash = 0;
 var hash_stack = 0;
-var openings_on = false;
 
 
 let boardbutton = false;
@@ -469,34 +468,36 @@ function get_one_opening_per_leaf(){
 }
 
 $(document).ready(async function() {
-    if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-        document.body.style.margin = '0';
-        document.body.style.padding = '0';
-        document.body.style.fontFamily = "'Arial', sans-serif";
-        document.body.style.color = '#bbf';
-        document.body.style.backgroundColor = '#000';
-        document.body.style.display = 'flex';
-        document.body.style.justifyContent = 'center';
-        document.body.style.alignItems = 'center';
-        document.body.style.height = '100vh';
-        document.body.style.textAlign = 'center';
-
-        // Remove the canvas and other elements when on mobile
-        const rootDiv = document.querySelector('div[style*="position: relative"]');
-        if (rootDiv) {
-          rootDiv.remove();
-        }
-
-        document.body.innerHTML = '<div style="padding: 20px;"><h1>Desktop Only</h1><p>This page is only available on desktop devices.</p></div>';
-        return;
-    }
-
     try {
         nodes_to_use = dataset.nodes_to_use;
 
         let tick = 0;
-        let ox = 0; let oy = 100; let zoom = 1;
-        let alpha = 0, beta = 0;
+        let zoom = 1;
+        // Full 3x3 rotation matrix (row-major), built up from incremental
+        // screen-space rotations so dragging always yaws/pitches relative to
+        // the current view instead of fixed world axes (avoids gimbal-lock
+        // confusion between yaw and roll at steep pitch).
+        let rotM = [1,0,0, 0,1,0, 0,0,1];
+
+        function matMul3(a, b) {
+            const r = new Array(9);
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    r[i*3+j] = a[i*3]*b[j] + a[i*3+1]*b[3+j] + a[i*3+2]*b[6+j];
+                }
+            }
+            return r;
+        }
+
+        function rotX(theta) {
+            const c = Math.cos(theta), s = Math.sin(theta);
+            return [1,0,0, 0,c,-s, 0,s,c];
+        }
+
+        function rotY(theta) {
+            const c = Math.cos(theta), s = Math.sin(theta);
+            return [c,0,s, 0,1,0, -s,0,c];
+        }
 
         nodes = {};
 
@@ -565,10 +566,24 @@ $(document).ready(async function() {
             info.innerHTML = info.innerHTML.replace(/<nodes>/g, Object.keys(nodes).length);
         }
 
+        // Smoothed camera center, in rotated space. Eases toward the
+        // highlighted node instead of snapping straight to it, so switching
+        // nodes glides rather than teleports.
+        let camX = null, camY = null;
+
         function render_graph() {
             graphctx.globalAlpha = 1;
             graphctx.lineWidth = 0.5;
-            for (const name in nodes) get_node_coordinates(name);
+            for (const name in nodes) rotate_node(name);
+            var targetX = nodes[hash].rx, targetY = nodes[hash].ry;
+            if (camX === null) { camX = targetX; camY = targetY; }
+            camX += (targetX - camX) * 0.08;
+            camY += (targetY - camY) * 0.08;
+            for (const name in nodes) {
+                var node = nodes[name];
+                node.screen_x = (node.rx - camX) / zoom + w / 2;
+                node.screen_y = (node.ry - camY) / zoom + h / 2;
+            }
             for (const name in nodes) {
                 const node = nodes[name];
                 for (const neighbor_idx in node.neighbors) {
@@ -576,7 +591,7 @@ $(document).ready(async function() {
                     const neighbor = nodes[neighbor_name];
                     if(typeof neighbor == "undefined") continue;
                     if(name < neighbor_name && (neighbor.neighbors != null && name in neighbor.neighbors)) continue;
-                    graphctx.globalAlpha = openings_on?0.2:(node.opacity * neighbor.opacity);
+                    graphctx.globalAlpha = node.opacity * neighbor.opacity;
                     graphctx.strokeStyle = get_color(name, neighbor_name);
                     graphctx.beginPath();
                     graphctx.moveTo(node.screen_x, node.screen_y);
@@ -607,14 +622,10 @@ $(document).ready(async function() {
             document.getElementById("strongsolver").href = "https://connect4.gamesolver.org/?pos=" + nodes[hash].rep;
         }
 
-        function get_node_coordinates (hash) {
-            var node = nodes[hash];
-            var rotatedX = node.x * Math.cos(alpha) + node.z * Math.sin(alpha);
-            var rotatedZ = -node.x * Math.sin(alpha) + node.z * Math.cos(alpha);
-            var rotatedY = rotatedZ * Math.sin(beta) + node.y * Math.cos(beta);
-
-            node.screen_x = (rotatedX - ox) / zoom + w / 2;
-            node.screen_y = (rotatedY - oy) / zoom + h / 2;
+        function rotate_node (name) {
+            var node = nodes[name];
+            node.rx = rotM[0] * node.x + rotM[1] * node.y + rotM[2] * node.z;
+            node.ry = rotM[3] * node.x + rotM[4] * node.y + rotM[5] * node.z;
         }
 
         function get_closest_node_to (coords) {
@@ -634,51 +645,94 @@ $(document).ready(async function() {
 
         window.addEventListener(`wheel`,
             (event) => {
-                zoom *= Math.pow(1.2, Math.sign(event.deltaY));
+                zoom *= Math.pow(1.08, Math.sign(event.deltaY));
                 render();
             }
         );
-        graphcanvas.addEventListener(`mousedown`, function(e){
-            var rect = graphcanvas.getBoundingClientRect();
-            var screen_coords = {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            };
-            hash = get_closest_node_to(screen_coords);
-            on_click_node();
-            on_board_change();
+
+        // Unified mouse/touch/pen handling: drag on the graph to rotate it,
+        // pinch with two pointers to zoom, tap/click a node to jump to it.
+        let activePointers = new Map();
+        let dragLast = null;
+        let pinchStartDist = null;
+        let pinchStartZoom = null;
+        let dragMoved = false;
+
+        function pointerDist() {
+            const pts = [...activePointers.values()];
+            return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        }
+
+        graphcanvas.addEventListener(`pointerdown`, function(e){
+            graphcanvas.setPointerCapture(e.pointerId);
+            activePointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
+            if (activePointers.size === 1) {
+                dragLast = {x: e.clientX, y: e.clientY};
+                dragMoved = false;
+            } else if (activePointers.size === 2) {
+                pinchStartDist = pointerDist();
+                pinchStartZoom = zoom;
+                dragLast = null;
+            }
         }, false);
 
-        window.addEventListener(`keydown`, key, false);
+        graphcanvas.addEventListener(`pointermove`, function(e){
+            if (!activePointers.has(e.pointerId)) return;
+            activePointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
 
-        function key (e) {
-            // if the user-input element is focused, ignore the key event
-            if (document.activeElement.id === 'user-input') return;
-            const c = e.keyCode;
-            const ch = String.fromCharCode(c);
-            if (c == 37) ox -= zoom * 100;
-            if (c == 38) oy -= zoom * 100;
-            if (c == 39) ox += zoom * 100;
-            if (c == 40) oy += zoom * 100;
-            if (ch == 'A') alpha -= .04;
-            if (ch == 'D') alpha += .04;
-            if (ch == 'S') beta -= .04;
-            if (ch == 'W') beta += .04;
-            if (ch == 'O') openings_on = !openings_on;
-            if (ch == 'U') {
-                if(hash_stack.length > 1) {
-                    let obj = hash_stack.pop();
-                    hash = obj.hash;
-                    extraMoves = obj.extra;
+            if (activePointers.size === 2 && pinchStartDist) {
+                zoom = pinchStartZoom * pinchStartDist / pointerDist();
+                render();
+            } else if (activePointers.size === 1 && dragLast) {
+                const dx = e.clientX - dragLast.x;
+                const dy = e.clientY - dragLast.y;
+                if (Math.hypot(dx, dy) > 4) dragMoved = true;
+                if (dragMoved) {
+                    // Rotate about the view's current screen-space axes (a
+                    // trackball), not fixed world axes, so drag direction
+                    // always matches on-screen motion regardless of pitch.
+                    rotM = matMul3(rotX(-dy * 0.01), matMul3(rotY(dx * 0.01), rotM));
+                    render();
                 }
-                update_opacity();
+                dragLast = {x: e.clientX, y: e.clientY};
             }
-            if (ch == 'R') {
-                reset_hash();
-                for (const name in nodes) nodes[name].opacity = 1;
+        }, false);
+
+        function endPointer(e){
+            if (!activePointers.has(e.pointerId)) return;
+            const wasSingleTap = activePointers.size === 1 && !dragMoved;
+            activePointers.delete(e.pointerId);
+            pinchStartDist = null;
+            dragLast = null;
+            if (wasSingleTap) {
+                var rect = graphcanvas.getBoundingClientRect();
+                var screen_coords = {
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                };
+                hash = get_closest_node_to(screen_coords);
+                on_click_node();
+                on_board_change();
             }
-            on_board_change();
         }
+        graphcanvas.addEventListener(`pointerup`, endPointer, false);
+        graphcanvas.addEventListener(`pointercancel`, endPointer, false);
+
+        document.getElementById('undo-btn').addEventListener('click', function(){
+            if(hash_stack.length > 1) {
+                let obj = hash_stack.pop();
+                hash = obj.hash;
+                extraMoves = obj.extra;
+            }
+            update_opacity();
+            on_board_change();
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', function(){
+            reset_hash();
+            for (const name in nodes) nodes[name].opacity = 1;
+            on_board_change();
+        });
 
         on_board_change = function(){
             render();
@@ -700,6 +754,14 @@ $(document).ready(async function() {
         }
         update_opacity();
         on_board_change();
+
+        // Keep rendering continuously so the camera easing toward the
+        // highlighted node animates smoothly rather than snapping.
+        function animate() {
+            render();
+            requestAnimationFrame(animate);
+        }
+        requestAnimationFrame(animate);
 
     } catch (error) {
         console.error('Error loading or parsing data:', error);
