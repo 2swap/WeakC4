@@ -22,19 +22,43 @@ BRANCHES = SOLUTION_DIR / "branches.json"
 STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 OUT = HERE / "solution.pb"
 
-# Steady states use 9 symbols; packed as a base-9 bignum rather than one byte
-# (or even one nibble) per cell, since 42 cells only ever need
-# ceil(log2(9**42)) = 134 bits, not 42*8 = 336 or even 42*4 = 168.
 SYMBOLS = {" ": 0, "1": 1, "2": 2, "|": 3, "!": 4, "-": 5, "@": 6, "+": 7, "=": 8}
-PACKED_SS_BYTES = (len(SYMBOLS) ** (solution.ROWS * solution.COLS)).bit_length() + 7 >> 3
 
 
-def pack_steady_state(diagram):
+def pack_steady_state_with_column_compression(diagram):
+    """
+    Columns usually contain the same character all the way up.
+    If the entire column is populated with a character that is neither "1" nor "2",
+    and the next column over begins with either a 1 or 2,
+    we stop copying data there since it is redundant.
+    """
     value = 0
-    for row in diagram:
-        for ch in row:
+    board_h = len(diagram)
+    board_w = len(diagram[0])
+    for x in range(board_w):
+        for y in range(board_h):
+            ch = diagram[board_h-1-y][x]
             value = value * len(SYMBOLS) + SYMBOLS[ch]
-    return value.to_bytes(PACKED_SS_BYTES, "big")
+
+            if ch != "1" and ch != "2":
+                all_up = True
+                for dy in range(y-1, -1, -1):
+                    d_ch = diagram[board_h-1-y][x]
+                    if d_ch != ch:
+                        all_up = False
+                        break
+
+                if all_up:
+                    last_column = x == board_w - 1
+                    if last_column:
+                        break
+
+                    next_column_bottom = diagram[board_h-1][x+1]
+                    next_column_has_stone = next_column_bottom == "1" or next_column_bottom == "2"
+                    if next_column_has_stone:
+                        break
+    num_bytes_needed = (value.bit_length()+7) >>3
+    return value.to_bytes(num_bytes_needed, "big")
 
 
 def build_branches(branches):
@@ -50,7 +74,7 @@ def build_steady_states(diagrams):
     message = format_pb2.SteadyStates()
     for diagram in diagrams:
         state = message.steadystates.add()
-        state.steadystate = pack_steady_state(diagram)
+        state.steadystate = pack_steady_state_with_column_compression(diagram)
     return message
 
 
