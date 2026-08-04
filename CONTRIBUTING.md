@@ -123,10 +123,10 @@ python solution/print_statistics.py
 
 ## What CI does
 
-Every push and pull request runs the whole-solution check, and the result
-appears in the **Summary** panel of the run, linked from the Checks tab. After
-a change lands on `main`, a second workflow re-renders the representations and
-commits whatever changed, and a third publishes the site.
+Every pull request runs the whole-solution check, and the result appears in the
+**Summary** panel of the run, linked from the Checks tab. Once a change is on
+`main`, the same workflow re-renders the representations, publishes the site,
+and commits whatever the render changed.
 
 A first-time contribution needs a maintainer to approve the run, so an empty
 Checks tab at first is normal.
