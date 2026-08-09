@@ -96,7 +96,7 @@ function render_board () {
         boardctx.fillText("which instructs the agent to play", 10, (dy+=21)+square_sz * dataset.board_h);
         boardctx.fillText("perfectly from here on."          , 10, (dy+=21)+square_sz * dataset.board_h);
     }
-    document.getElementById('controls').style.top = (boardcanvas.height + 15) + 'px';
+    document.getElementById('controls').style.left = (boardcanvas.width + 15) + 'px';
 }
 
 // Helper function to draw a stone
