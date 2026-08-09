@@ -9,27 +9,17 @@ If you have somehow made it here without watching <a href="https://www.youtube.c
 <h3 style="font-size:1.5rem; margin-bottom:0.25rem;">Deck Structure</h3>
 <p>This deck is built from the solution graph and contains two parts:</p>
 <ul>
-    <li><strong>Learn</strong>: cards teach a unique suggested move for every non-leaf node in the graph according to the weak solution.</li>
-    <li><strong>Practice</strong>: randomly shuffled opening play. Play as Red (player 1) against diverse opponents with a high coverage of the graph.</li>
+    <li><strong>Branches</strong>: cards teach a unique suggested move for every non-leaf node in the graph according to the weak solution.</li>
+    <li><strong>Leaves</strong>: cards teach the Steady State solution for every leaf node in the graph.</li>
+    <li><strong>Opening Practice</strong>: randomly shuffled opening play. Play as Red (player 1) against diverse opponents with a high coverage of the graph, until arriving at a steady state.</li>
 </ul>
 </section>
 
 <section>
-<h3 style="font-size:1.5rem; margin-bottom:0.25rem;">Openings Included</h3>
-<p>The Learn cards are further subdivided by opening name. Included openings correlate well with those seen in actual play, such as the 6-1 opening, candlesticks openings, and D3–D4 openings.</p>
-<p>Some other common openings (for example, the 5-4 and the Swedish) are omitted because the solution graph follows alternative lines that avoid those openings, thereby saving the need to learn them.</p>
-<p>Since no one has ever diagrammed the space of Connect 4 openings, names in common English have not really standardized, and instead modern players most often simply list the columns played in order to communicate an opening (i.e. "4366".)</p>
-<p>Since the graph very cleanly shows openings in discernible branches and clusters, I took the creative liberty to name them based on either the shape of the disks on the board, or their "anatomical" location on the graph (e.g. Fist, Palm, Crown, etc.) I like to think of the graph as a kind of octopus with a head (the center-column openings,) tentacles (426 and 415 openings,) and two fists (4366 openings.) Do you see the resemblance?</p>
 <img src="https://2swap.github.io/WeakC4/sample.png" alt="Connect 4 sample image" style="max-width:100%;height:auto;border-radius:6px;display:block;">
-<p>Openings are loosely ordered according to my opinion of their popularity, also keeping similar openings close together. You can jump around in the deck without much extra trouble.</p>
-<p>To view the openings in the solution graph, press O inside the <a href="https://2swap.github.io/WeakC4/">solution graph</a> to see the openings color-coded on the graph. The Learn cards are organized by these same branches.</p>
-</section>
-
-<section>
     <h3 style="font-size:1.5rem; margin-bottom:0.25rem;">It's not that hard!</h3>
-    <p>The whole solution graph contains ~8700 nodes. However, we don't need to learn any nodes which are Yellow-to-play, which are ~85% of the graph!
-    <p>Furthermore, there may be ~1300 Learn cards, but most are duplicated up to mirror symmetry to aid recognition. It’s not 1300 unique openings.</p>
-    <p>This deck intentionally omits explicit Steady State solutions for leaf nodes. Instead of memorizing those endgames, I recommend you "learn by playing." With practice, a human player can develop a sufficient intuition for endgames which renders rote memorization unnecessary.</p>
+    <p>The whole solution graph contains ~3700 nodes. However, almost half of those are duplicates up to mirror symmetry!</p>
+    <p>This deck includes Steady State solutions for leaf nodes. Instead of memorizing those endgames, I recommend you "learn by playing." With practice, a human player can develop a pretty good intuition for endgames which renders rote memorization usually unnecessary. I have included them for completeness anyways.</p>
     <p>Furthermore, keep your eyes out for trends and repeating patterns- these will make memorization much easier!</p>
 </section>
 

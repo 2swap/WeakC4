@@ -1,0 +1,165 @@
+<div class="front" id="front">
+    <canvas id="canvas" width="350px" height="300px"></canvas>
+    <h4 id="text">Pick a symbol, then click the squares that get it. Flip when done!</h4>
+    <div id="palette"></div>
+</div>
+
+<script>
+var w = 7;
+var h = 6;
+
+var ctx = document.getElementById('canvas').getContext('2d');
+var canvasEl = document.getElementById('canvas');
+var back = document.getElementById('back');
+
+// Diagram field looks like "       ,       ,       ,       ,2      ,2 !11  "
+// - 6 rows, top to bottom, 7 characters per row, one per column.
+// Each character is either a stone ('1' Red, '2' Yellow) or a marker from
+// solution/validate_solution.py describing Red's steady-state strategy for
+// that empty square. ' ' (claimeven) is the default marker and is drawn as
+// nothing, exactly as the solution diagrams themselves leave it blank.
+var rawDiagram = "{{Diagram}}";
+var rows = rawDiagram.split(",");
+var storageKey = 'c4steady:' + rawDiagram;
+
+var EMPTY = '#669';
+var GUESS_COLOR = '#eee';
+var CORRECT_COLOR = '#7cff7c';
+var WRONG_COLOR = '#ff5c5c';
+var STONE_COLOR = { '1': '#f00', '2': '#ff0' };
+var MARKER_COLOR = {
+    '!': '#ff5370',
+    '@': '#c792ea',
+    '|': '#89ddff',
+    '+': '#c3e88d',
+    '=': '#ffcb6b',
+    '-': '#f78c6c',
+};
+// Paint keys: press a number to pick a symbol, then click squares to stamp
+// it - 0 picks the eraser (blank/claimeven).
+var PAINT_KEYS = [
+    { key: '0', symbol: '' },
+    { key: '1', symbol: '!' },
+    { key: '2', symbol: '@' },
+    { key: '3', symbol: '|' },
+    { key: '4', symbol: '+' },
+    { key: '5', symbol: '=' },
+    { key: '6', symbol: '-' },
+];
+
+var isStone = (ch) => ch === '1' || ch === '2';
+
+var blankGuess = () => rows.map((row) => row.split('').map(() => ''));
+
+var loadGuess = () => {
+    try {
+        var raw = localStorage.getItem(storageKey);
+        if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return blankGuess();
+};
+
+var saveGuess = (guess) => {
+    try { localStorage.setItem(storageKey, JSON.stringify(guess)); } catch (e) {}
+};
+
+// On a fresh front view this is a new attempt, so start blank. On the back
+// (embedded copy of this same script via {{FrontSide}}) read back whatever
+// was guessed during the front view that just happened, for grading.
+var guess = back ? loadGuess() : blankGuess();
+if (!back) saveGuess(guess);
+var selectedSymbol = '';
+
+var drawStone = (x, y, color) => {
+    var cx = (x + 0.5) * 50;
+    var cy = (y + 0.5) * 50;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 20, 0, 2 * Math.PI, false);
+    ctx.fill();
+};
+
+var drawSymbol = (x, y, ch, color) => {
+    ctx.fillStyle = color;
+    ctx.font = 'bold 30px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ch, (x + 0.5) * 50, (y + 0.5) * 50);
+};
+
+var drawRing = (x, y, color) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc((x + 0.5) * 50, (y + 0.5) * 50, 22, 0, 2 * Math.PI, false);
+    ctx.stroke();
+};
+
+var render = () => {
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) drawStone(x, y, EMPTY);
+    }
+    for (let y = 0; y < h; y++) {
+        var row = rows[y] || '';
+        for (let x = 0; x < w; x++) {
+            var ch = row[x];
+            if (isStone(ch)) {
+                drawStone(x, y, STONE_COLOR[ch]);
+                continue;
+            }
+            if (back) {
+                let actual = MARKER_COLOR[ch] ? ch : '';
+                let guessed = (guess[y] && guess[y][x]) || '';
+                if (actual) drawSymbol(x, y, actual, MARKER_COLOR[actual]);
+                else if (guessed) drawSymbol(x, y, guessed, '#888');
+                if (actual || guessed) drawRing(x, y, guessed === actual ? CORRECT_COLOR : WRONG_COLOR);
+            } else {
+                let guessed = (guess[y] && guess[y][x]) || '';
+                if (guessed) drawSymbol(x, y, guessed, GUESS_COLOR);
+            }
+        }
+    }
+};
+
+if (!back) {
+    var paletteEl = document.getElementById('palette');
+    var swatchEls = {};
+    PAINT_KEYS.forEach((entry) => {
+        var btn = document.createElement('button');
+        btn.textContent = entry.key + ': ' + (entry.symbol || '✕');
+        btn.style.margin = '2px';
+        btn.style.fontWeight = 'bold';
+        btn.style.color = entry.symbol ? MARKER_COLOR[entry.symbol] : '#eee';
+        btn.addEventListener('click', () => selectSymbol(entry.symbol));
+        paletteEl.appendChild(btn);
+        swatchEls[entry.symbol] = btn;
+    });
+
+    var selectSymbol = (symbol) => {
+        selectedSymbol = symbol;
+        PAINT_KEYS.forEach((entry) => {
+            swatchEls[entry.symbol].style.outline = entry.symbol === symbol ? '2px solid #fff' : 'none';
+        });
+    };
+    selectSymbol('');
+
+    document.addEventListener('keydown', (e) => {
+        var entry = PAINT_KEYS.find((p) => p.key === e.key);
+        if (entry) selectSymbol(entry.symbol);
+    });
+
+    canvasEl.addEventListener('click', (e) => {
+        var rect = canvasEl.getBoundingClientRect();
+        var x = Math.floor((e.clientX - rect.left) / 50);
+        var y = Math.floor((e.clientY - rect.top) / 50);
+        if (x < 0 || x >= w || y < 0 || y >= h) return;
+        var row = rows[y] || '';
+        if (isStone(row[x])) return;
+        guess[y][x] = selectedSymbol;
+        saveGuess(guess);
+        render();
+    });
+}
+
+render();
+</script>

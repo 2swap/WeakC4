@@ -1,64 +1,23 @@
 #!/usr/bin/env python3
+"""Build the "2swap's Connect 4" Anki deck from solution/.
+Reads solution/branches.json and solution/steady_states.json directly.
+"""
 import json
+import random
 import requests
-import re
+import sys
 from pathlib import Path
 
-board_width = 7
-board_height = 6
+SOLUTION_DIR = Path(__file__).resolve().parent.parent.parent / "solution"
+BRANCHES = SOLUTION_DIR / "branches.json"
+STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 
-indices = dict([(item, index) for index, item in enumerate(prefixes)])
-
-def make_board_array_from_rep(rep):
-    board = [[0]*board_width for _ in range(board_height)]
-    for i, c in enumerate(rep):
-        col = int(c) - 1
-        row = 0
-        while row < board_height and board[row][col] != 0:
-            row += 1
-        board[row][col] = 1 if i % 2 == 0 else 2
-    return board
-
-def is_equal(rep1, rep2):
-    return make_board_array_from_rep(rep1) == make_board_array_from_rep(rep2)
-
-def who_won(board):
-    # Check horizontal, vertical, and diagonal for a winner
-    for row in range(board_height):
-        for col in range(board_width):
-            if board[row][col] == 0:
-                continue
-            player = board[row][col]
-            # Check horizontal
-            if col <= board_width - 4 and all(board[row][col+i] == player for i in range(4)):
-                return player
-            # Check vertical
-            if row <= board_height - 4 and all(board[row+i][col] == player for i in range(4)):
-                return player
-            # Check diagonal down-right
-            if row <= board_height - 4 and col <= board_width - 4 and all(board[row+i][col+i] == player for i in range(4)):
-                return player
-            # Check diagonal down-left
-            if row <= board_height - 4 and col >= 3 and all(board[row+i][col-i] == player for i in range(4)):
-                return player
-    return None
-
-def is_immediate_danger(rep):
-    board = make_board_array_from_rep(rep)
-    # for each column, check if yellow can win on the next move by playing in that column
-    for col in range(board_width):
-        # Find the lowest empty row in this column
-        row = 0
-        while row < board_height and board[row][col] != 0:
-            row += 1
-        if row == board_height:
-            continue
-        copy_board = [r[:] for r in board]
-        copy_board[row][col] = 2
-        if who_won(copy_board) == 2:
-            return True
+sys.path.insert(0, str(SOLUTION_DIR))
+import validate_solution as solution  # noqa: E402
 
 deck_name = "2swap's Connect 4"
+branch_model_name = deck_name
+steady_model_name = deck_name + " Steady State"
 
 def anki_connect(action, params={}):
     try:
@@ -74,12 +33,20 @@ def anki_connect(action, params={}):
         print("AnkiConnect is not running. Please turn it on.")
 
 def create_anki_deck(deck):
-    resp_json = anki_connect("createDeck", { "deck": deck } )
+    anki_connect("createDeck", { "deck": deck } )
 
-def anki_add_notes(cards):
+def build_branches():
+    print("Building branch cards...")
+    deck = deck_name + "::1. Branches"
+    create_anki_deck(deck)
+
+    branches = json.loads(BRANCHES.read_text())
+    cards = [("learn:" + position, move) for position, move in branches.items()]
+    cards.sort(key=lambda card: (len(card[0]), card[0]))
+
     notes = [{
         "deckName": deck,
-        "modelName": deck_name, # Note type is the same name as the deck
+        "modelName": branch_model_name,
         "fields": {
             "Setup": setup,
             "Move": move,
@@ -87,87 +54,153 @@ def anki_add_notes(cards):
         "options": {
             "allowDuplicate": False
         },
-    } for deck, setup, move in cards]
-    resp_json = anki_connect("addNotes", { "notes": notes } )
+    } for setup, move in cards]
+    anki_connect("addNotes", { "notes": notes } )
+    print(f"Added {len(notes)} branch cards to Anki.")
 
-def find_move(setup, neighbor_rep):
-    # Neighbor rep should have exactly one more move
-    assert(len(neighbor_rep) == len(setup) + 1)
-    # Find what move was different by finding the amount of pieces in each column
-    move = None
-    moves_per_column_setup = [0]*7
-    moves_per_column_neighbor = [0]*7
-    for i, col in enumerate(setup):
-        moves_per_column_setup[int(col)-1] += 1
-    for i, col in enumerate(neighbor_rep):
-        moves_per_column_neighbor[int(col)-1] += 1
-    for col in range(7):
-        if moves_per_column_neighbor[col] > moves_per_column_setup[col]:
-            # Check that the condition is only met for a single column
-            assert(move is None)
-            move = str(col+1)
+def build_steady_states():
+    print("Building steady state cards...")
+    deck = deck_name + "::3. Leaves"
+    create_anki_deck(deck)
 
-    assert(move is not None)
-    return move
+    steady_states = json.loads(STEADY_STATES.read_text())
+    notes = [{
+        "deckName": deck,
+        "modelName": steady_model_name,
+        "fields": {
+            "Diagram": ",".join(diagram),
+        },
+        "options": {
+            "allowDuplicate": False
+        },
+    } for diagram in steady_states]
+    anki_connect("addNotes", { "notes": notes } )
+    print(f"Added {len(notes)} steady state cards to Anki.")
 
-def build_dataset(js_path):
-    print(f"Building learn cards from dataset at {js_path}...")
+def _mirror_key(key):
+    return tuple(row[::-1] for row in key)
 
-    # if the file is not found, print an error message and exit
-    if not Path(js_path).is_file():
-        print(f"Error: no annotated graph found at {js_path}. Get the annotated graph by printing `dataset.nodes_to_use` in the console of the viewer, and copy that into {js_path}.")
-        exit(0)
-    text = Path(js_path).read_text()
-    node_map = json.loads(text)
+def _canon(key):
+    """A board, canonicalized up to mirroring, matching how
+    branches.json/steady_states.json dedupe boards."""
+    mkey = _mirror_key(key)
+    return key if key <= mkey else mkey
 
-    # List of cards to add. We will first populate it,
-    # then sort the cards lexicographically, then add to Anki.
-    cards = []
+def _legal_columns(board):
+    return [c for c in range(solution.COLS) if solution.col_height(board, c) < solution.ROWS]
 
-    prefix_counts = {}
+def _build_lookup(branches, steady_states):
+    red = {solution.board_key(position): move for position, move in branches.items()}
+    leaves = {solution.board_key_from_diagram(diagram) for diagram in steady_states}
 
-    # Populate cards
-    for h, node_json in node_map.items():
-        # Only for red-to-move nodes
-        if len(node_json["rep"]) % 2 == 0 and node_json["neighbors"] is not None:
-            # There should be only one neighbor (the best move)
-            assert(len(node_json["neighbors"]) == 1)
-            setup = node_json["rep"]
-            if(is_immediate_danger(setup)): # No need to memorize forced moves
-                print(f"Skipping immediate danger setup: {setup}")
+    def red_lookup(key):
+        if key in red:
+            return red[key]
+        mirror_move = red.get(_mirror_key(key))
+        return None if mirror_move is None else str(8 - int(mirror_move))
+
+    def is_leaf(key):
+        return key in leaves or _mirror_key(key) in leaves
+
+    return red_lookup, is_leaf
+
+def _walk_forced(position, red_lookup, is_leaf):
+    """Advance through Red's committed moves (and Yellow's already-decided
+    reply, if any, from where this is called) until either the line ends or
+    Yellow faces a real decision.
+
+    Returns ('end', sequence) once Red wins or a steady state is reached, or
+    ('yellow', (position, key)) at the next point Yellow has to choose a
+    column.
+
+    A line that reaches a steady state always ends on Yellow's move - Yellow
+    is the one who walks into the leaf. That move is auto-played by the
+    computer during practice, never clicked by the user, so keeping it
+    distinguishes nothing: two lines that agree on every Red decision and
+    differ only in which leaf Yellow's last move happened to land on (e.g.
+    "4151" vs "4152") would otherwise produce two cards quizzing the exact
+    same clicks. Trimming it collapses such pairs into one.
+    """
+    while True:
+        key = solution.board_key(position)
+        if len(position) % 2 == 0:
+            if is_leaf(key):
+                return 'end', position[:-1]
+            move = red_lookup(key)
+            if move is not None:
+                position += move
                 continue
+            board = solution.board_from_position(position)
+            win_col = next(c for c in range(solution.COLS) if solution._red_wins_now(board, c))
+            return 'end', position + str(win_col + 1)
+        return 'yellow', (position, key)
 
-            prefix = node_json["prefix"]
-            index = indices[prefix] + 1
-            prefix = ("0" if index < 10 else "") + str(index) + " - " + prefix
-            neighbor_hash = node_json["neighbors"][0]
-            neighbor_rep = node_map[neighbor_hash]["rep"]
-            move = find_move(setup, neighbor_rep)
-            deck = deck_name + f"::Learn::{prefix}"
-            cards.append( (deck, "learn:" + setup, move) )
-            prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
-            if(prefix is None):
-                print(f"No prefix found for setup {setup}")
+def _build_practice_sequences(red_lookup, is_leaf, rng):
+    """Every practice line needed for full "high coverage" of Yellow's
+    decisions: each reachable board (up to mirroring) is expanded into its
+    legal Yellow replies exactly once. A reply that leads to a board already
+    expanded elsewhere - a transposition - doesn't need expanding again, since
+    its own replies are already covered by that earlier expansion; the line
+    through it simply ends there (right after Red's own last move, itself a
+    natural stopping point)."""
+    fully_expanded = set()
+    sequences = []
 
-    for prefix in prefix_counts.keys():
-        create_anki_deck(deck_name + "::Learn::" + prefix)
+    def cover(position, key):
+        fully_expanded.add(_canon(key))
+        board = solution.board_from_position(position)
+        cols = _legal_columns(board)
+        rng.shuffle(cols)
+        for col in cols:
+            kind, val = _walk_forced(position + str(col + 1), red_lookup, is_leaf)
+            if kind == 'end':
+                sequences.append(val)
+            else:
+                ypos, ykey = val
+                if _canon(ykey) in fully_expanded:
+                    sequences.append(ypos)
+                else:
+                    cover(ypos, ykey)
 
-    for prefix, count in prefix_counts.items():
-        print(f"Prefix: {prefix}, Count: {count}")
+    kind, val = _walk_forced("", red_lookup, is_leaf)
+    if kind == 'end':
+        sequences.append(val)
+    else:
+        ypos, ykey = val
+        cover(ypos, ykey)
+    return sequences
 
-    # Sort cards by length of prefix, then lexicographically by setup.
-    cards.sort(key=lambda x: (len(x[1]), x[1]))
+def build_practice():
+    print("Building practice cards...")
+    deck = deck_name + "::2. Opening Practice"
+    create_anki_deck(deck)
 
-    anki_add_notes(cards)
+    branches = json.loads(BRANCHES.read_text())
+    steady_states = json.loads(STEADY_STATES.read_text())
+    red_lookup, is_leaf = _build_lookup(branches, steady_states)
 
-    print(f"Added {len(cards)} cards to Anki.")
+    sequences = sorted(set(_build_practice_sequences(red_lookup, is_leaf, random.Random(42))))
+
+    notes = [{
+        "deckName": deck,
+        "modelName": branch_model_name,
+        "fields": {
+            "Setup": "practice:" + seq,
+            "Move": "",
+        },
+        "options": {
+            "allowDuplicate": False
+        },
+    } for seq in sequences]
+    anki_connect("addNotes", { "notes": notes } )
+    print(f"Added {len(notes)} practice cards to Anki.")
 
 def build_instructions():
     print("Building instructions...")
-    create_anki_deck(deck_name + "::Instructions")
+    create_anki_deck(deck_name + "::0. Instructions")
     html = Path("InstructionCard.html").read_text()
     notes = [{
-        "deckName": deck_name + "::Instructions",
+        "deckName": deck_name + "::0. Instructions",
         "modelName": "Basic",
         "fields": {
             "Front": "Turn the card to see how to use this deck!",
@@ -177,8 +210,10 @@ def build_instructions():
             "allowDuplicate": False
         },
     }]
-    resp_json = anki_connect("addNotes", { "notes": notes } )
+    anki_connect("addNotes", { "notes": notes } )
     print("Added instructions card to Anki.")
 
 build_instructions()
-build_dataset("../c4_full_prefixes.js")
+build_branches()
+build_practice()
+build_steady_states()
