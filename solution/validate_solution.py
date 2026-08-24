@@ -340,6 +340,7 @@ def check_branches_unique(branches):
 def check_yellow_children(branches, steady_states):
     used_branches = set()
     used_steady_states = set()
+    failures = []
     steady_keys = {board_key_from_diagram(diagram): i for i, diagram in enumerate(steady_states)}
     steady_canon = {}
     for key, i in steady_keys.items():
@@ -360,8 +361,9 @@ def check_yellow_children(branches, steady_states):
             child[y][x] = 2
             # Red's committed move lost the game, so nothing below matters.
             if makes_four(child, x, y, 2):
-                raise AssertionError([position, rmove, ymove,
-                                      "Yellow wins the game with this reply"])
+                failures.append([position, rmove, ymove,
+                                 "Yellow wins the game with this reply"])
+                continue
             child_key = tuple(tuple(row) for row in child)
             canon = min(child_key, mirror_key(child_key))
 
@@ -377,8 +379,8 @@ def check_yellow_children(branches, steady_states):
                     has_rtw = True
                     break
             if sum(bool(v) for v in (has_branch, has_steady_state, has_rtw)) != 1:
-                raise AssertionError([position, rmove, ymove, "does not satisfy exactly one of", has_branch, has_steady_state, has_rtw])
-    return used_branches, used_steady_states
+                failures.append([position, rmove, ymove, "does not satisfy exactly one of", has_branch, has_steady_state, has_rtw])
+    return failures, used_branches, used_steady_states
 
 
 def check_no_extraneous_branches(branches, used_branches):
@@ -457,10 +459,11 @@ def main():
            lambda: check_steady_states_unique(steady_states))
     record(4, "no two branches share a board (up to mirroring)",
            lambda: check_branches_unique(branches))
-    yellow_result = record(
+    yellow_failures, used_branches, used_steady_states = check_yellow_children(branches, steady_states)
+    checks.append((
         5, "every Yellow reply is covered by exactly one of branch/steady-state/immediate-win",
-        lambda: check_yellow_children(branches, steady_states))
-    used_branches, used_steady_states = yellow_result if yellow_result is not None else (set(), set())
+        not yellow_failures, [str(row) for row in yellow_failures],
+    ))
     record(6, "no branch is extraneous/unreachable",
            lambda: check_no_extraneous_branches(branches, used_branches))
     record(7, "no steady state is extraneous/unreachable",
