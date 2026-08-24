@@ -477,11 +477,11 @@ def main():
     lines = [
         "# Solution validation", "",
         f"_completed in {elapsed:.1f}s_", "",
-        "| # | check | result |",
-        "|---|---|---|",
+        "| # | result | check",
+        "|---|--------|",
     ]
     for number, description, passed, _details in checks:
-        lines.append(f"| {number} | {description} | {'✅' if passed else '❌'} |")
+        lines.append(f"| {number} | {'[PASS]' if passed else '[FAIL]'} | {description}")
     for number, description, passed, details in checks:
         if passed:
             continue
