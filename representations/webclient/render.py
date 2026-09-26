@@ -21,6 +21,7 @@ negated.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -36,7 +37,7 @@ POSITIONS = HERE / "positions.txt"
 OUT_JS = HERE / "graph.js"
 
 BOARD_H, BOARD_W, GAME_NAME = solution.ROWS, solution.COLS, "c4"
-BLANK_SS = ["       " for _ in range(BOARD_H)]
+BLANK_SS = [" " * BOARD_W for _ in range(BOARD_H)]   # non-leaf node: no diagram
 
 
 def mirror_key(key):
@@ -56,11 +57,25 @@ def load_positions(path):
     return coords
 
 
-def lookup_coords(coords, key):
+def lookup_coords(coords, key, fallback=None):
+    """The board's 3-D coordinate, borrowing its mirror twin's (with x negated)
+    when only that is stored. A board that neither positions.txt nor spread_graph
+    has placed yet - a subtree that just became reachable - starts a short
+    deterministic hop from its parent; spread_graph.py settles it properly on the
+    next run."""
     if key in coords:
         return coords[key]
-    x, y, z = coords[mirror_key(key)]
-    return -x, y, z
+    if mirror_key(key) in coords:
+        x, y, z = coords[mirror_key(key)]
+        return -x, y, z
+    if fallback is None:
+        raise KeyError(key)
+    px, py, pz = fallback
+    seed = int(hashlib.md5(repr(key).encode()).hexdigest()[:6], 16)
+    hop = (((seed >> 0) & 7) - 3.5, ((seed >> 3) & 7) - 3.5, ((seed >> 6) & 7) - 3.5)
+    placed = (px + hop[0], py + hop[1], pz + hop[2])
+    coords[key] = placed
+    return placed
 
 
 def build_graph(branches_path, entries_path, positions_path):
@@ -103,19 +118,19 @@ def build_graph(branches_path, entries_path, positions_path):
     # same name instead of inventing a second one nothing will ever build.
     canonical = {root_key: ""}
 
-    def name_for(key, candidate_position):
+    def name_for(key, candidate_position, parent_xyz):
         if key not in canonical:
             canonical[key] = candidate_position
-            stack.append((key, candidate_position))
+            stack.append((key, candidate_position, parent_xyz))
         return canonical[key]
 
-    stack = [(root_key, "")]
+    stack = [(root_key, "", (0.0, 0.0, 0.0))]
     while stack:
-        key, position = stack.pop()
+        key, position, parent_xyz = stack.pop()
         if key in seen:
             continue
         seen.add(key)
-        x, y, z = lookup_coords(coords, key)
+        x, y, z = lookup_coords(coords, key, parent_xyz)
         red_to_move = len(position) % 2 == 0
 
         if red_to_move:
@@ -134,7 +149,7 @@ def build_graph(branches_path, entries_path, positions_path):
                     continue  # instant win: nothing to render past here
                 raise AssertionError(f"no branch or leaf for reachable board at {position!r}")
             child_key = solution.board_key(position + move)
-            child_position = name_for(child_key, position + move)
+            child_position = name_for(child_key, position + move, (x, y, z))
             nodes[position] = {
                 "data": {"ss": BLANK_SS},
                 "neighbors": [child_position],
@@ -157,7 +172,7 @@ def build_graph(branches_path, entries_path, positions_path):
             excused = not won and any(solution._red_wins_now(board, c) for c in range(BOARD_W))
             board[row][col] = 0
             if covered:
-                children.append(name_for(after_key, position + str(col + 1)))
+                children.append(name_for(after_key, position + str(col + 1), (x, y, z)))
             elif not excused:
                 raise AssertionError(
                     f"Yellow reply in column {col + 1} at {position!r} is uncovered"

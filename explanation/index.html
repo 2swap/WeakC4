@@ -117,20 +117,23 @@
         <p>The language I chose to express these "simple tricks" uses a "Steady State Diagram", which looks like this:</p>
         <img src="SteadyState.png" alt="Steady State Diagram">
         <p>This should be thought of as a "cheat sheet" which tells Red how to continue playing until winning, for the position drawn in the picture. The diagram features annotations on top of the grid squares which are to be used by Red to determine what to do next. As Red plays, the diagram does not change.</p>
-        <p>To determine what Red should do, we look at all of the legal moves which Red can make right now. We completely disregard "floating" annotations.</p>
+        <p>Every empty square carries a single hexadecimal digit, <code>0</code> through <code>f</code>, giving its <i>priority level</i> &mdash; <code>0</code> the strongest, <code>f</code> the weakest.</p>
+        <p>To determine what Red should do, we look at all of the legal moves which Red can make right now. We completely disregard "floating" annotations: squares Red cannot play into this turn never matter, whatever digit they carry.</p>
         <img src="SteadyStateImmediate.png" alt="Steady State Immediate">
-        <p>Red's chosen move is selected by following this list of ordered priorities:</p>
+        <p>Note that this is a newer steady state language than presented in my Connect 4 videos. It was first demonstrated to be efficient here: https://dave-zyx.github.io/, and I have merely adopted this model.</p>
+        <p>Red's chosen move is selected using this ordered list of priorities:</p>
         <ol>
             <li>Make a winning move, if available.</li>
             <li>Block an opponent winning move, if available.</li>
-            <li>Play on an ! (pronounced as 'urgent'), if available.</li>
-            <li>Play on a @ (pronounced as '<a href="https://senseis.xmp.net/?Miai">miai</a>'), <i>only if there is exactly one available to be played immediately</i>.</li>
-            <li>Play on a | (pronounced as 'claimodd') only if it is on an odd row (otherwise ignore it), or a blank-space cell (pronounced 'claimeven') only if it is on an even row. Note that claimeven is represented with a blank space because it shows up a <i>lot</i>, so it is good to think of claimeven as a sort of 'default behavior'.</li>
-            <li>Play on a +, if available.</li>
-            <li>Play on an =, if available.</li>
-            <li>Play on a -.</li>
+            <li>Otherwise, consider the sixteen levels <code>0</code>, <code>1</code>, &hellip; <code>f</code> in order. At each level, look at the squares carrying that digit that Red can play into right now:
+                <ul>
+                    <li>exactly one &mdash; play it;</li>
+                    <li>none &mdash; drop to the next level;</li>
+                    <li>two or more &mdash; they cancel; drop to the next level.</li>
+                </ul>
+            </li>
         </ol>
-        <p>In creation of these diagrams, I provide the guarantee that there is always precisely one unique move suggested by this priority list. In other words, among the diagrams featured on my site, you will never find one where two urgents are available. This corresponds to the earlier qualification that a red-to-move node has exactly one outgoing edge.</p>
+        <p>The first level that resolves to a single playable square decides the move. In creation of these diagrams, I provide the guarantee that, at every position Red reaches while following one, some level always resolves to exactly one playable square. This corresponds to the earlier qualification that a red-to-move node has exactly one outgoing edge.</p>
         <p>I won't discuss all the design decisions that guided me to use this specific language. To gain some intuition, I suggest you view <a href="../">the graph</a> and explore some steady state diagrams yourself.</p>
         <p>I also don't make the claim that it is perfect, or optimal, or anything of the like. I converged on this design primarily through lots of trial and error.</p>
         <p>Take a moment to consider that there is a trade between complexity and expressiveness of the Steady State language and graph size. I chose the best balance I could manage. If you have a better idea, I encourage you to try it :)</p>
@@ -139,9 +142,10 @@
         <h2>Technical Approach</h2>
         <p>Briefly, here's a description of the rest of the technical approach which permitted me to generate the graph:</p>
         <ul>
-            <li>A genetic algorithm was used to quickly predict candidate Steady States for a given graph, later verified by brute force. <a href="https://github.com/2swap/swaptube/blob/master/src/DataObjects/Connect4/SteadyState.cpp#L429-L503">[Code]</a></li>
-            <li>I used all sorts of methods to select the best branches which are trimmed as much as possible. This involved a lot of search and backtracking, but realistically I wasn't able to search for minimal branches at a depth any higher than about 8 <a href="https://github.com/2swap/swaptube/blob/master/src/DataObjects/Connect4/C4Board.cpp#L376-L478">[Code]</a>. Finding the best branches in the opening involved lots of trial and error, some of my own intuition as a Connect 4 player, and soliciting suggestions for node-pruning from other players. Of course, I do not guarantee optimality of this graph. I expect it can probably be compressed by another 25 percent or so, without any modification to the Steady State language.</li>
-            <li><a href="https://en.wikipedia.org/wiki/Force-directed_graph_drawing">Force-directed graph spreading</a> was used to generate the graph visualization, appropriately spread-out in 3d-space. <a href="https://github.com/2swap/swaptube/blob/master/src/CUDA/GraphSpread.cu">[Code]</a>. Mirror forces were applied to guide the graph to reflect the mirror structure of the game.</li>
+            <li>A genetic algorithm was used to quickly predict candidate Steady States for a given graph, later verified by brute force. This was my original approach, and has remained very fruitful. Many optimizations have been used in conjunction with this approach, such as seeding based on cousin steady-states, mutating more frequently in spots associated with observed blunders, and so on.</li>
+            <li>Contributor Waffle3z pioneered an approach reducing steady state identification to boolean satisfiability (SAT). This has also found many steady states.</li>
+            <li>I used all sorts of methods to select the best branches which are trimmed as much as possible. This involved a lot of search and backtracking, but realistically I wasn't able to search for minimal branches at a depth any higher than about 8. Finding the best branches in the opening involved lots of trial and error, some of my own intuition as a Connect 4 player, and soliciting suggestions for node-pruning from other players. Of course, I do not guarantee optimality of this graph.</li>
+            <li><a href="https://en.wikipedia.org/wiki/Force-directed_graph_drawing">Force-directed graph spreading</a> was used to generate the graph visualization, appropriately spread-out in 3d-space. <a href="https://github.com/2swap/swaptube/blob/master/src/CUDA/graph_spread.cu">This was originally done in swaptube using CUDA.</a>. Mirror forces were applied to guide the graph to reflect the mirror structure of the game. Since then, now that the graphs are much smaller, that code has migrated to this repository. <a href="https://github.com/2swap/WeakC4/blob/main/representations/webclient/spread_graph.py">[Code]</a></li>
         </ul>
 
         <h2>Results</h2>

@@ -79,7 +79,7 @@ function render_board () {
     // Draw the board
     for (var x = 0; x < 7; x++) {
         for (var y = 0; y < 6; y++) {
-            drawStone(x, y, board_arr[y][x], winningLine);
+            drawDisk(x, y, board_arr[y][x], winningLine);
         }
     }
 
@@ -99,8 +99,8 @@ function render_board () {
     document.getElementById('controls').style.left = (boardcanvas.width + 15) + 'px';
 }
 
-// Helper function to draw a stone
-function drawStone(x, y, col, winningLine) {
+// Helper function to draw a disk
+function drawDisk(x, y, col, winningLine) {
     col = ["#026", "#900", "#760"][col];
     const px = (x + 0.5) * square_sz;
     const py = (5 - y + 0.5) * square_sz;
@@ -110,7 +110,7 @@ function drawStone(x, y, col, winningLine) {
     boardctx.arc(px, py, 23, 0, 2 * Math.PI, false);
     boardctx.fill();
 
-    // Highlight winning stones
+    // Highlight winning disks
     if (winningLine && winningLine.some(([wy, wx]) => wx === x && wy === y)) {
         boardctx.fillStyle = "gold"; // Highlight color
         boardctx.beginPath();
@@ -120,9 +120,9 @@ function drawStone(x, y, col, winningLine) {
 
     boardctx.fillStyle = "white";
 
-    // Draw steady state markers if needed
+    // Draw steady state markers if needed (a hex priority level, 0 strongest)
     const ss = nodes[hash].data.ss[5 - y].charAt(x);
-    if (ss !== '1' && ss !== '2') {
+    if (ss !== 'R' && ss !== 'Y' && ss !== ' ') {
         boardctx.fillText(ss, px, py + 12);
     }
 }
@@ -218,11 +218,13 @@ function makeMoveAsRed(){
     }
 }
 
+// Red's move from a steady state diagram, mirroring
+// solution/validate_solution.py's query_steady_state.
 function querySteadyState(boardArr, steadyState) {
     const ROWS = 6;
     const COLUMNS = 7;
+    const LEVELS = "0123456789abcdef";
 
-    // Helper to get the state of a column
     function getColumnState(x) {
         for (let y = 0; y < ROWS; y++) {
             if (boardArr[y][x] === 0) return y; // Find the first empty spot in column x
@@ -230,19 +232,7 @@ function querySteadyState(boardArr, steadyState) {
         return -1; // Column is full
     }
 
-    // Check if placing a piece in column x wins the game for the given player
-    function checkWin(board, x, player) {
-        const y = getColumnState(x);
-        if (y === -1) return false; // Column is full
-        board[y][x] = player; // Temporarily place the piece
-        const isWin = checkFourInARow(board, x, y, player); // Check win condition
-        board[y][x] = 0; // Undo the temporary placement
-        return isWin;
-    }
-
-    // Check if there are four in a row
     function checkFourInARow(board, x, y, player) {
-        // Check horizontal, vertical, and two diagonals
         const directions = [
             { dx: 1, dy: 0 }, { dx: 0, dy: 1 },
             { dx: 1, dy: 1 }, { dx: 1, dy: -1 }
@@ -263,62 +253,32 @@ function querySteadyState(boardArr, steadyState) {
         return false;
     }
 
-    // Decode steady state character to priority
-    function decodePriority(c) {
-        switch (c) {
-            case '@': return 'miai';
-            case ' ': case '.': return 'claimeven';
-            case '|': return 'claimodd';
-            case '+': return 'plus';
-            case '=': return 'equal';
-            case '-': return 'minus';
-            case '1': return 'red';
-            case '2': return 'yellow';
-            case '!': return 'urgent';
-            default: throw new Error(`Invalid character in steadyState: ${c}`);
-        }
+    function checkWin(board, x, player) {
+        const y = getColumnState(x);
+        if (y === -1) return false;
+        board[y][x] = player;
+        const isWin = checkFourInARow(board, x, y, player);
+        board[y][x] = 0;
+        return isWin;
     }
 
-    // Identify instant wins
-    for (let x = 0; x < COLUMNS; x++) {
-        if (getColumnState(x) !== -1) {
-            if (checkWin(boardArr, x, 1)) return x + 1; // Player 1 wins
-        }
-    }
-
-    // Identify blocking moves
-    for (let x = 0; x < COLUMNS; x++) {
-        if (getColumnState(x) !== -1) {
-            if (checkWin(boardArr, x, 2)) return x + 1; // Block Player 2's win
-        }
-    }
-
-    // Priority order
-    const priorities = ['urgent', 'miai', 'claimeven', 'claimodd', 'plus', 'equal', 'minus'];
-
-    for (let priority of priorities) {
-        let validMoves = [];
+    // Take a win, otherwise block one.
+    for (let player = 1; player <= 2; player++) {
         for (let x = 0; x < COLUMNS; x++) {
-            y = getColumnState(x);
-            if(y == -1) continue;
-            y = 5-y;
-            const ch = steadyState[y].charAt(x);
-            if (decodePriority(ch) === priority) {
-                // Handle special cases
-                if (priority === 'miai') {
-                    validMoves.push(x);
-                    if (validMoves.length > 1) break; // Ignore if more than one miai
-                } else if (priority === 'claimeven') {
-                    if (y % 2 === 0) return x + 1; // Only valid for even rows
-                } else if (priority === 'claimodd') {
-                    if (y % 2 === 1) return x + 1; // Only valid for odd rows
-                } else {
-                    return x + 1; // Return move for other priorities
-                }
-            }
+            if (getColumnState(x) !== -1 && checkWin(boardArr, x, player)) return x + 1;
         }
-        // If only one valid miai, return it
-        if (priority === 'miai' && validMoves.length === 1) return validMoves[0] + 1;
+    }
+
+    // Scan the priority levels; play the first with exactly one playable cell.
+    for (const ch of LEVELS) {
+        const found = [];
+        for (let x = 0; x < COLUMNS; x++) {
+            const yb = getColumnState(x);
+            if (yb === -1) continue;
+            const yt = ROWS - 1 - yb;
+            if (steadyState[yt].charAt(x) === ch) found.push(x + 1);
+        }
+        if (found.length === 1) return found[0];
     }
 
     // No valid move found

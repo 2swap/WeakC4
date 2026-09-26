@@ -16,32 +16,22 @@ rows, top row first:
 ```json
 [
   [
-    "   |   ",
-    "       ",
-    "   | | ",
-    "  =| + ",
-    "2 =!1@-",
-    "2 21112"
+    "2226222",
+    "2222222",
+    "2226262",
+    "2246232",
+    "Y240R15",
+    "Y2YRRRY"
   ]
 ]
 ```
 
 - Exactly six rows of exactly seven characters.
-- `!` urgent, `@` miai, `|` claimodd, a space claimeven, `+` plus, `=` equal,
-  `-` minus; `1` is a Red stone and `2` a Yellow stone.
-- The stones say which board a block belongs to, so it carries no separate
+- `R` is a Red disk and `Y` a Yellow disk. Every other cell is a hex digit
+  `0`-`f` giving that empty square's priority level in Red's policy, where `0`
+  is the strongest level and `f` the weakest. There is no blank cell.
+- The disks say which board a block belongs to, so it carries no separate
   identifier.
-- A `|` means different things on different rows. On an odd row it is a
-  claimodd and can be played. On an even row it can never be played, and its
-  only effect is to stop that cell being a claimeven. A space is the mirror of
-  this, playable on an even row and silent on an odd one, so neither character
-  is a blank.
-- A run of bars therefore marks the whole column as claimodd, each odd-row bar
-  becoming playable as the column fills to that height, with the even-row bars
-  between them suppressing the claimevens. Most such columns hold several
-  claimodds rather than one.
-- A claimeven is a space, and the quoting keeps trailing ones intact, so count
-  the characters rather than trusting the eye: `"2      "` is a full row.
 - Only one of each mirror-equivalent pair is stored. The other orientation is
   re-derived when a representation is rendered, so do not add both.
 
@@ -74,23 +64,16 @@ rather than deriving it, so nothing regenerates it automatically.
 
 Red's move follows the priority list from the
 [explanation page](https://2swap.github.io/WeakC4/explanation/): win, block,
-`!`, `@` (only when exactly one is playable), `|` on an odd row or a space on
-an even row, `+`, `=`, `-`. Red must win against *every* legal Yellow
-continuation; a draw is not enough.
+then the sixteen levels `0`, `1`, ... `f` in order. At each level, look at the
+squares carrying that digit that Red can play into right now:
 
-Two consequences of the site's guarantee that "there is always precisely one
-unique move suggested by this priority list":
+- exactly one - play it;
+- none - fall through to the next level;
+- two or more - they cancel; fall through to the next level.
 
-- **A tie between two markers at the same priority level is a failure**, not a
-  coin flip. This has nothing to do with a drawn game. Two playable cells at
-  the applicable level means the diagram is rejected, with one exception: two
-  playable `@` do not tie, they cancel, and the next level decides instead.
-  Note that the viewer does
-  not enforce this, since it only has to play a move and takes the leftmost of
-  a tie, so watching the site play an ambiguous diagram will not reveal that it
-  is ambiguous. Nothing there is checking.
-- **Claimodd and claimeven are one level**, being a single numbered item on
-  that list. A playable claimodd and a playable claimeven at once is a tie.
+The first level that resolves to a single playable square wins. Red must win
+against *every* legal Yellow continuation; a draw is not enough. If for some
+reachable position the diagram falls through all hex digits, it is rejected.
 
 ## What makes the solution valid
 

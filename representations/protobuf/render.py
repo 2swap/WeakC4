@@ -22,42 +22,21 @@ BRANCHES = SOLUTION_DIR / "branches.json"
 STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 OUT = HERE / "solution.pb"
 
-SYMBOLS = {" ": 0, "1": 1, "2": 2, "|": 3, "!": 4, "-": 5, "@": 6, "+": 7, "=": 8}
+SYMBOLS = {"R": 0, "Y": 1}
+for _i, _ch in enumerate("0123456789abcdef"):
+    SYMBOLS[_ch] = 2 + _i
+BASE = len(SYMBOLS)
 
 
-def pack_steady_state_with_column_compression(diagram):
-    """
-    Columns usually contain the same character all the way up.
-    If the entire column is populated with a character that is neither "1" nor "2",
-    and the next column over begins with either a 1 or 2,
-    we stop copying data there since it is redundant.
-    """
+def pack_steady_state(diagram):
+    """Base-18 encoding of all 42 cells, column-major, bottom to top."""
     value = 0
     board_h = len(diagram)
     board_w = len(diagram[0])
     for x in range(board_w):
         for y in range(board_h):
-            ch = diagram[board_h-1-y][x]
-            value = value * len(SYMBOLS) + SYMBOLS[ch]
-
-            if ch != "1" and ch != "2":
-                all_up = True
-                for dy in range(y-1, -1, -1):
-                    d_ch = diagram[board_h-1-y][x]
-                    if d_ch != ch:
-                        all_up = False
-                        break
-
-                if all_up:
-                    last_column = x == board_w - 1
-                    if last_column:
-                        break
-
-                    next_column_bottom = diagram[board_h-1][x+1]
-                    next_column_has_stone = next_column_bottom == "1" or next_column_bottom == "2"
-                    if next_column_has_stone:
-                        break
-    num_bytes_needed = (value.bit_length()+7) >>3
+            value = value * BASE + SYMBOLS[diagram[board_h - 1 - y][x]]
+    num_bytes_needed = (value.bit_length() + 7) >> 3
     return value.to_bytes(num_bytes_needed, "big")
 
 
@@ -74,7 +53,7 @@ def build_steady_states(diagrams):
     message = format_pb2.SteadyStates()
     for diagram in diagrams:
         state = message.steadystates.add()
-        state.steadystate = pack_steady_state_with_column_compression(diagram)
+        state.steadystate = pack_steady_state(diagram)
     return message
 
 

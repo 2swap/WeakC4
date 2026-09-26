@@ -88,13 +88,13 @@ var populateGrid = () => {
     }
 };
 
-var drawStone = (xCoord, yCoord, color) => {
-    var stoneRadius = 20;
+var drawDisk = (xCoord, yCoord, color) => {
+    var diskRadius = 20;
     var x = (xCoord + 0.5) * 50;
     var y = (h - yCoord - 0.5) * 50;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(x, y, stoneRadius, 0, 2 * Math.PI, false);
+    ctx.arc(x, y, diskRadius, 0, 2 * Math.PI, false);
     ctx.fill();
 };
 
@@ -117,7 +117,7 @@ var render = () => {
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             var color = grid[y][x];
-            drawStone(x, y, color);
+            drawDisk(x, y, color);
         }
     }
     // Hover effect only in practice mode and when it's the player's turn
@@ -125,7 +125,7 @@ var render = () => {
         var yRow = getNextEmptyRow(hoverCol);
         if(yRow !== -1) {
             ctx.globalAlpha = 0.2;
-            drawStone(hoverCol, yRow, RED);
+            drawDisk(hoverCol, yRow, RED);
             ctx.globalAlpha = 1.0;
         }
     }

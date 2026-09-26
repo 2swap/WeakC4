@@ -36,8 +36,8 @@ def print_steady_states_stats():
 
         by_length = {}
         for diagram in steady_states:
-            stones = sum(1 for row in diagram for ch in row if (ch == '1' or ch == '2'))
-            by_length[stones] = by_length.get(stones, 0) + 1
+            disks = sum(1 for row in diagram for ch in row if (ch == 'R' or ch == 'Y'))
+            by_length[disks] = by_length.get(disks, 0) + 1
 
         cprint(COLOR_STEADY_STATES, f"total steady states: {len(steady_states)}")
         cprint(COLOR_STEADY_STATES, "by ply count:")

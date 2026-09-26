@@ -31,11 +31,10 @@ from pathlib import Path
 sys.setrecursionlimit(100_000)
 ROWS, COLS = 6, 7
 
-MIAI, CLAIMEVEN, CLAIMODD = "@", " ", "|"
-PLUS, EQUAL, MINUS, URGENT = "+", "=", "-", "!"
-STONES = "12"
-MARKERS = MIAI + CLAIMEVEN + CLAIMODD + PLUS + EQUAL + MINUS + URGENT
-KNOWN = set(MARKERS + STONES)
+LEVEL_CHARS = "0123456789abcdef"
+RED, YELLOW = "R", "Y"
+DISKS = RED + YELLOW
+KNOWN = set(LEVEL_CHARS + DISKS)
 
 HERE = Path(__file__).resolve().parent
 BRANCHES = HERE / "branches.json"
@@ -89,7 +88,7 @@ def mirror_diagram(diagram):
 
 
 def board_from_diagram(diagram):
-    """The stones a diagram draws, as a board[y][x] (y=0 bottom row).
+    """The disks a diagram draws, as a board[y][x] (y=0 bottom row).
 
     A diagram is the only record of its board now that steady_states.json
     keeps one representative per mirror-equivalent pair (see
@@ -100,8 +99,8 @@ def board_from_diagram(diagram):
     for row_from_top, row in enumerate(diagram):
         y = ROWS - 1 - row_from_top
         for x, ch in enumerate(row):
-            if ch in STONES:
-                board[y][x] = STONES.index(ch) + 1
+            if ch in DISKS:
+                board[y][x] = DISKS.index(ch) + 1
     return board
 
 
@@ -131,31 +130,21 @@ def query_steady_state(board, diagram):
             if wins(x, player):
                 return x + 1
 
-    def playable(marker_chars, parity=None):
+    def playable(level_char):
         found = []
         for x in range(COLS):
             y = heights[x]
             if y >= ROWS:
                 continue
             yt = ROWS - 1 - y
-            if diagram[yt][x] in marker_chars and (parity is None or yt % 2 == parity):
+            if diagram[yt][x] == level_char:
                 found.append(x + 1)
         return found
 
-    miai = playable(MIAI)
-    levels = (
-        playable(URGENT),
-        miai if len(miai) == 1 else [],
-        playable(CLAIMEVEN, parity=0) + playable(CLAIMODD, parity=1),
-        playable(PLUS),
-        playable(EQUAL),
-        playable(MINUS),
-    )
-    for valid in levels:
+    for level_char in LEVEL_CHARS:
+        valid = playable(level_char)
         if len(valid) == 1:
             return valid[0]
-        if len(valid) > 1:
-            return None
     return None
 
 
@@ -164,7 +153,7 @@ def verify_leaf(diagram):
 
     Depends on nothing but the diagram, which is why a diagram already in the
     graph never needs rechecking when a different one is added. The board it
-    starts from is the diagram's own stones, not a position string: a diagram
+    starts from is the diagram's own disks, not a position string: a diagram
     is the only record of its board now that steady_states.json keeps one
     representative per mirror-equivalent pair and carries no position at all.
     """
@@ -233,6 +222,13 @@ def load_branches(path):
 def load_steady_states(path):
     with open(path, "r") as f:
         return json.load(f)
+
+
+def write_steady_states(path, steady_states):
+    blocks = ["[\n" + ",\n".join(f'    "{row}"' for row in diagram) + "\n  ]"
+              for diagram in steady_states]
+    with open(path, "w") as f:
+        f.write("[\n  " + ", ".join(blocks) + "\n]\n")
 
 
 def board_has_four(board):
@@ -418,6 +414,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--jobs", type=int, default=0, metavar="N",
                         help="parallel processes (default: one per core)")
+    parser.add_argument("--prune", action="store_true",
+                        help="delete unreachable steady states from steady_states.json")
     args = parser.parse_args()
 
     # On Windows stdout falls back to the ANSI codepage whenever it is not a
@@ -464,6 +462,15 @@ def main():
         5, "every Yellow reply is covered by exactly one of branch/steady-state/immediate-win",
         not yellow_failures, [str(row) for row in yellow_failures],
     ))
+
+    pruned = []
+    if args.prune:
+        pruned = [i for i in range(len(steady_states)) if i not in used_steady_states]
+        if pruned:
+            steady_states = [d for i, d in enumerate(steady_states) if i in used_steady_states]
+            write_steady_states(STEADY_STATES, steady_states)
+            used_steady_states = set(range(len(steady_states)))
+
     record(6, "no branch is extraneous/unreachable",
            lambda: check_no_extraneous_branches(branches, used_branches))
     record(7, "no steady state is extraneous/unreachable",
@@ -477,6 +484,10 @@ def main():
     lines = [
         "# Solution validation", "",
         f"_completed in {elapsed:.1f}s_", "",
+    ]
+    if pruned:
+        lines += [f"_pruned {len(pruned)} unreachable steady state(s) from steady_states.json_", ""]
+    lines += [
         "| # | result | check",
         "|---|--------|",
     ]
