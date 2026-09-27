@@ -49,11 +49,12 @@
         <br>
         <center><a href="../"><h1>View the solution to Connect 4 here</h1></a></center>
         <center><p>The graph, the viewer, and the verification tooling all live in the <a href="https://github.com/2swap/WeakC4">WeakC4 repository on GitHub</a>.</p></center>
+        <center><p>For a video explanation of the approach, watch <a href="https://www.youtube.com/watch?v=KaljD3Q3ct0"><i>I Solved Connect 4</i></a> on YouTube.</p></center>
 
         <p>WeakC4 is a <i>search-free, low-knowledge</i> solution to 7x6 Connect 4, constructed by identifying a language which describes perfect play for a small subset of nodes, and then identifying a small opening tree which contains only those nodes as leaves.</p>
         <p>This website provides a formal <i>strategy</i> for optimal first-player <a href="https://en.wikipedia.org/wiki/Connect_Four">Connect Four</a> play, which is fundamentally different from existing <a href="https://en.wikipedia.org/wiki/Solved_game">strong and weak solutions</a> such as <a href="https://tromp.github.io/c4/fhour.html">Fhourstones</a>:</p>
         <ul>
-            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/protobuf/c4_full.pb.gz">about 22 kilobytes</a>.</li>
+            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/blob/main/representations/protobuf/solution.pb">about 25 kilobytes</a>.</li>
             <li>It uses no search during runtime, running at <i>O(wh)</i> time complexity to select a move.</li>
             <li>It can be visualized in its entirety and rendered in realtime.</li>
             <li>It visually illustrates and confirms the existence of particularly challenging openings, lines, and variations already known to connect 4 players.</li>
@@ -120,7 +121,7 @@
         <p>Every empty square carries a single hexadecimal digit, <code>0</code> through <code>f</code>, giving its <i>priority level</i> &mdash; <code>0</code> the strongest, <code>f</code> the weakest.</p>
         <p>To determine what Red should do, we look at all of the legal moves which Red can make right now. We completely disregard "floating" annotations: squares Red cannot play into this turn never matter, whatever digit they carry.</p>
         <img src="SteadyStateImmediate.png" alt="Steady State Immediate">
-        <p>Note that this is a newer steady state language than presented in my Connect 4 videos. It was first demonstrated to be efficient here: https://dave-zyx.github.io/, and I have merely adopted this model.</p>
+        <p>Note that this is a newer steady state language than presented in my Connect 4 videos. It was first demonstrated to be efficient by <a href="https://dave-zyx.github.io/">dave-zyx</a>, and I have merely adopted this model.</p>
         <p>Red's chosen move is selected using this ordered list of priorities:</p>
         <ol>
             <li>Make a winning move, if available.</li>
@@ -145,7 +146,7 @@
             <li>A genetic algorithm was used to quickly predict candidate Steady States for a given graph, later verified by brute force. This was my original approach, and has remained very fruitful. Many optimizations have been used in conjunction with this approach, such as seeding based on cousin steady-states, mutating more frequently in spots associated with observed blunders, and so on.</li>
             <li>Contributor Waffle3z pioneered an approach reducing steady state identification to boolean satisfiability (SAT). This has also found many steady states.</li>
             <li>I used all sorts of methods to select the best branches which are trimmed as much as possible. This involved a lot of search and backtracking, but realistically I wasn't able to search for minimal branches at a depth any higher than about 8. Finding the best branches in the opening involved lots of trial and error, some of my own intuition as a Connect 4 player, and soliciting suggestions for node-pruning from other players. Of course, I do not guarantee optimality of this graph.</li>
-            <li><a href="https://en.wikipedia.org/wiki/Force-directed_graph_drawing">Force-directed graph spreading</a> was used to generate the graph visualization, appropriately spread-out in 3d-space. <a href="https://github.com/2swap/swaptube/blob/master/src/CUDA/graph_spread.cu">This was originally done in swaptube using CUDA.</a>. Mirror forces were applied to guide the graph to reflect the mirror structure of the game. Since then, now that the graphs are much smaller, that code has migrated to this repository. <a href="https://github.com/2swap/WeakC4/blob/main/representations/webclient/spread_graph.py">[Code]</a></li>
+            <li><a href="https://en.wikipedia.org/wiki/Force-directed_graph_drawing">Force-directed graph spreading</a> was used to generate the graph visualization, appropriately spread-out in 3d-space. <a href="https://github.com/2swap/swaptube/blob/master/src/CUDA/graph_spread.cu">This was originally done in swaptube using CUDA</a>. Mirror forces were applied to guide the graph to reflect the mirror structure of the game. Since then, now that the graphs are much smaller, that code has migrated to this repository. <a href="https://github.com/2swap/WeakC4/blob/main/representations/webclient/spread_graph.py">[Code]</a></li>
         </ul>
 
         <h2>Results</h2>
@@ -153,8 +154,8 @@
         <p><a href="../">The resulting solution</a> has the following properties:</p>
         <ul>
             <li>It uses no search during runtime, running at <i>O(wh)</i> time complexity to select a move at any valid position.</li>
-            <li>It has been reduced to a total of under 10,000 nodes (subject to further reduction, see the graph page for a live count.) About two-thirds of these nodes are leaves representing steady states.</li>
-            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/tree/main/representations/protobuf/solution.pb">about 22 kilobytes</a>.</li>
+            <li>It has been reduced to a total of under 2,600 nodes (subject to further reduction, see the graph page for a live count.) About two-thirds of these nodes are leaves representing steady states.</li>
+            <li>It depends on so little information that it fits in <a href="https://github.com/2swap/WeakC4/blob/main/representations/protobuf/solution.pb">about 25 kilobytes</a>.</li>
             <li>This level of compression can be compared to <a href="https://tromp.github.io/c4/connect4_thesis.pdf">Allis (1988)</a>, who found an opening book of 500,000 nodes which permitted real-time play, but still invoked search.</li>
             <li>Traversing this tree and confirming its validity runs slightly faster on my machine than solving the game directly with Fhourstones, in some sense implying that this is the fastest "proof-by-compute" of the claim that connect 4 is a player-1-to-win game. This is even the case without any clever proof-of-correctness of steady-states which I have yet to implement- we are just brute-force checking them.</li>
             <li>Sooner or later, I will make an Anki opening deck using the discovered branches, so that humans who wish to attempt memorization can do so.</li>
@@ -170,16 +171,22 @@
         <p>A pessimistic physicist with a reductionist attitude might say that reality is merely composed of particulate phenomena, and that the segmentable, nameable macroscopic world is an illusion, or a construction of human invention. However, this physicist falls into the same philosophical trap of the Chess competitors following naive strategies A and B, dismissive of a knowledge-based mode of understanding via pattern recognition, instead deferring to raw mechanics.</p>
         <p>Connect 4 is in a rather magical place in terms of complexity. It is ripe with emergent objects, and yet it is simple enough to visualize and formally reason about computationally. I am unaware of any other attempts to make a low-information weak solution to Connect 4 which forego search, so my sample size is one, but it seems to me that this sort of compression <i>depends on</i> a multi-resolutional approach, effectively contradicting the philosophy of the reductionist physicist as a viable means of approaching arbitrary emergent objects.</p>
         <p>I hope the reader can appreciate this endeavor not merely as a strategy for the game of Connect 4, but more importantly as a formal exercise in <i>extracting understanding</i> from an emergent object- a problem neglected by traditional computational approaches to solving board games.</p>
-    </body>
 
     <h2>Credits</h2>
     <p>Both <a href="https://tromp.github.io/c4/fhour.html">Fhourstones</a> by John Tromp and Pascal Pons's online <a href="https://connect4.gamesolver.org/">Strong Connect 4 Solver</a> were used for positional analysis in constructing the graph, the former for search algorithms and the latter for human analysis. Creating this would have been much more painful without those tools.</p>
-    <p>If you find a branch that you think is inefficient, let me know! Here are some people who have already suggested branches resulting in a reduction of nodes in the graph:</p>
+    <p>If you find a branch that you think is inefficient, see <a href="https://github.com/2swap/WeakC4/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> for instructions on how to publish it here! Thanks to contributors who have helped to reduce the graph:</p>
     <ul>
+        <li>Waffle3z reduced an enormous number of nodes through reduction to boolean satisfiability (SAT).</li>
+        <li>dave-zyx <a href="https://dave-zyx.github.io/">simplified the steady state language used</a>, and found a smaller graph using that new language, which prompted me to adopt it in favor of my old language featured in my <a href="https://www.youtube.com/watch?v=KaljD3Q3ct0">Connect 4 videos</a>.</li>
         <li>CTL560 is a monster at finding steady states by hand.</li>
-        <li>Radiant</li>
-        <li>Nod</li>
-        <li>IAMHER0BRINE</li>
-        <li>Fireball</li>
+        <li>Thanks to the members of the Connect 4 Marauders Discord server for assistance in early graph reductions:
+        <ul>
+            <li>Radiant</li>
+            <li>Nod</li>
+            <li>IAMHER0BRINE</li>
+            <li>Fireball</li>
+        </ul>
+        </li>
     </ul>
+    </body>
 </html>
