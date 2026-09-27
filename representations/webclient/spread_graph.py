@@ -19,7 +19,7 @@ import render  # noqa: E402
 POSITIONS = HERE / "positions.txt"
 
 DEFAULT_ITERATIONS = 1
-DEFAULT_DT = 1
+DEFAULT_DT = 5
 
 
 def mirror_key(key):
