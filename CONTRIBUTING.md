@@ -27,9 +27,9 @@ rows, top row first:
 ```
 
 - Exactly six rows of exactly seven characters.
-- `R` is a Red disk and `Y` a Yellow disk. Every other cell is a hex digit
-  `0`-`f` giving that empty square's priority level in Red's policy, where `0`
-  is the strongest level and `f` the weakest. There is no blank cell.
+- `R` is a Red disk and `Y` a Yellow disk. Every other cell is a digit
+  `0`-`d` (fourteen levels) giving that empty square's priority level in Red's
+  policy, where `0` is the strongest level and `d` the weakest. There is no blank cell.
 - The disks say which board a block belongs to, so it carries no separate
   identifier.
 - Only one of each mirror-equivalent pair is stored. The other orientation is
@@ -64,7 +64,7 @@ rather than deriving it, so nothing regenerates it automatically.
 
 Red's move follows the priority list from the
 [explanation page](https://2swap.github.io/WeakC4/explanation/): win, block,
-then the sixteen levels `0`, `1`, ... `f` in order. At each level, look at the
+then the fourteen levels `0`, `1`, ... `d` in order. At each level, look at the
 squares carrying that digit that Red can play into right now:
 
 - exactly one - play it;
@@ -73,7 +73,7 @@ squares carrying that digit that Red can play into right now:
 
 The first level that resolves to a single playable square wins. Red must win
 against *every* legal Yellow continuation; a draw is not enough. If for some
-reachable position the diagram falls through all hex digits, it is rejected.
+reachable position the diagram falls through all fourteen levels, it is rejected.
 
 ## What makes the solution valid
 

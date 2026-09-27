@@ -22,22 +22,20 @@ BRANCHES = SOLUTION_DIR / "branches.json"
 STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 OUT = HERE / "solution.pb"
 
-SYMBOLS = {"R": 0, "Y": 1}
-for _i, _ch in enumerate("0123456789abcdef"):
-    SYMBOLS[_ch] = 2 + _i
-BASE = len(SYMBOLS)
+# 16 symbols -> one 4-bit nibble per cell: the 14 priority levels are 0..13,
+# a Red disk is 14 and a Yellow disk 15.
+SYMBOLS = {ch: i for i, ch in enumerate(solution.LEVEL_CHARS)}
+SYMBOLS["R"], SYMBOLS["Y"] = 14, 15
+assert len(SYMBOLS) == 16
 
 
 def pack_steady_state(diagram):
-    """Base-18 encoding of all 42 cells, column-major, bottom to top."""
-    value = 0
+    """42 cells, column-major, bottom to top, two cells per byte (first cell in
+    the high nibble): always exactly 21 bytes."""
     board_h = len(diagram)
     board_w = len(diagram[0])
-    for x in range(board_w):
-        for y in range(board_h):
-            value = value * BASE + SYMBOLS[diagram[board_h - 1 - y][x]]
-    num_bytes_needed = (value.bit_length() + 7) >> 3
-    return value.to_bytes(num_bytes_needed, "big")
+    cells = [SYMBOLS[diagram[board_h - 1 - y][x]] for x in range(board_w) for y in range(board_h)]
+    return bytes((cells[i] << 4) | cells[i + 1] for i in range(0, len(cells), 2))
 
 
 def build_branches(branches):

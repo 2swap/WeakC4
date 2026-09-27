@@ -118,7 +118,7 @@
         <p>The language I chose to express these "simple tricks" uses a "Steady State Diagram", which looks like this:</p>
         <img src="SteadyState.png" alt="Steady State Diagram">
         <p>This should be thought of as a "cheat sheet" which tells Red how to continue playing until winning, for the position drawn in the picture. The diagram features annotations on top of the grid squares which are to be used by Red to determine what to do next. As Red plays, the diagram does not change.</p>
-        <p>Every empty square carries a single hexadecimal digit, <code>0</code> through <code>f</code>, giving its <i>priority level</i> &mdash; <code>0</code> the strongest, <code>f</code> the weakest.</p>
+        <p>Every empty square carries a single hexadecimal digit, <code>0</code> through <code>d</code>, giving its <i>priority level</i> &mdash; <code>0</code> the strongest, <code>d</code> the weakest. (Fourteen levels plus the two disk colours make sixteen symbols: exactly four bits per square.)</p>
         <p>To determine what Red should do, we look at all of the legal moves which Red can make right now. We completely disregard "floating" annotations: squares Red cannot play into this turn never matter, whatever digit they carry.</p>
         <img src="SteadyStateImmediate.png" alt="Steady State Immediate">
         <p>Note that this is a newer steady state language than presented in my Connect 4 videos. It was first demonstrated to be efficient by <a href="https://dave-zyx.github.io/">dave-zyx</a>, and I have merely adopted this model.</p>
@@ -126,7 +126,7 @@
         <ol>
             <li>Make a winning move, if available.</li>
             <li>Block an opponent winning move, if available.</li>
-            <li>Otherwise, consider the sixteen levels <code>0</code>, <code>1</code>, &hellip; <code>f</code> in order. At each level, look at the squares carrying that digit that Red can play into right now:
+            <li>Otherwise, consider the fourteen levels <code>0</code>, <code>1</code>, &hellip; <code>d</code> in order. At each level, look at the squares carrying that digit that Red can play into right now:
                 <ul>
                     <li>exactly one &mdash; play it;</li>
                     <li>none &mdash; drop to the next level;</li>

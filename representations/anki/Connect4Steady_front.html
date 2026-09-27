@@ -14,14 +14,14 @@ var back = document.getElementById('back');
 
 // Diagram field looks like "2222222,fffffff,2222222,fffffff,Y222222,Y20RR22"
 // - 6 rows, top to bottom, 7 characters per row, one per column.
-// Each character is either a disk ('R' Red, 'Y' Yellow) or a hex digit '0'..'f'
+// Each character is either a disk ('R' Red, 'Y' Yellow) or a level digit '0'..'d'
 // giving that empty square's priority level in Red's steady-state policy (see
-// solution/validate_solution.py). '0' is the strongest level, 'f' the weakest.
+// solution/validate_solution.py). '0' is the strongest level, 'd' the weakest.
 var rawDiagram = "{{Diagram}}";
 var rows = rawDiagram.split(",");
 var storageKey = 'c4steady:' + rawDiagram;
 
-var LEVELS = "0123456789abcdef";
+var LEVELS = "0123456789abcd";
 var EMPTY = '#669';
 var GUESS_COLOR = '#eee';
 var CORRECT_COLOR = '#7cff7c';
@@ -29,7 +29,7 @@ var WRONG_COLOR = '#ff5c5c';
 var DISK_COLOR = { 'R': '#f00', 'Y': '#ff0' };
 // A red -> amber -> green -> blue ramp: strong levels warm, weak levels cool.
 var LEVEL_COLOR = {};
-for (var i = 0; i < 16; i++) LEVEL_COLOR[LEVELS[i]] = 'hsl(' + (i * 16) + ',70%,62%)';
+for (var i = 0; i < LEVELS.length; i++) LEVEL_COLOR[LEVELS[i]] = 'hsl(' + Math.round(i * 256 / LEVELS.length) + ',70%,62%)';
 
 var isDisk = (ch) => ch === 'R' || ch === 'Y';
 
@@ -109,7 +109,7 @@ if (!back) {
     var paletteEl = document.getElementById('palette');
     var swatchEls = {};
     var paintKeys = [{ key: '.', symbol: '' }];
-    for (var k = 0; k < 16; k++) paintKeys.push({ key: LEVELS[k], symbol: LEVELS[k] });
+    for (var k = 0; k < LEVELS.length; k++) paintKeys.push({ key: LEVELS[k], symbol: LEVELS[k] });
 
     paintKeys.forEach((entry) => {
         var btn = document.createElement('button');

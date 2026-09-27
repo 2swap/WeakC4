@@ -10,7 +10,8 @@ message Branches {
 }
 
 message SteadyState {
-  bytes steadystate = 1; // 18 legal symbols (R, Y, 16 priority levels), 42 cells -> ceil(log2(18^42)). TODO collapse this to 4 bits each?
+  bytes steadystate = 1; // 16 symbols (levels 0-13 = '0'..'d', 14 = Red, 15 = Yellow), 4 bits per cell,
+                         // 42 cells column-major bottom-to-top, first cell in the high nibble -> 21 bytes
 }
 
 message SteadyStates {
