@@ -5,9 +5,10 @@ Every pair of nodes repels, and every edge attracts.
 from __future__ import annotations
 
 import argparse
-import math
 import sys
 from pathlib import Path
+
+import numpy as np
 
 HERE = Path(__file__).resolve().parent
 SOLUTION_DIR = HERE.parent.parent / "solution"
@@ -26,30 +27,32 @@ def mirror_key(key):
     return tuple(row[::-1] for row in key)
 
 
-def repulsion_force(pi, pj):
-    """Runs between every pair of nodes."""
-    dx, dy, dz = pi[0] - pj[0], pi[1] - pj[1], pi[2] - pj[2]
-    dist_sq = dx * dx + dy * dy + dz * dz + 1.0
-    length = math.sqrt(dx * dx + dy * dy + dz * dz)
-    if length < 1e-9:
-        return 0.0, 0.0, 0.0
-    scale = 1.0 / (length * (dist_sq * 10.0 + 2.0))
-    return dx * scale, dy * scale, dz * scale
+def repulsion_forces(pos):
+    """Runs between every pair of nodes. Returns the net force on each node."""
+    d = pos[:, None, :] - pos[None, :, :]
+    dist_sq = np.einsum("ijk,ijk->ij", d, d)
+    length = np.sqrt(dist_sq)
+    with np.errstate(divide="ignore"):
+        scale = 1.0 / (length * ((dist_sq + 1.0) * 10.0 + 2.0))
+    # Also zeroes the diagonal, where a node would repel itself.
+    scale[length < 1e-9] = 0.0
+    return np.einsum("ij,ijk->ik", scale, d)
 
 
-def attraction_force(pi, pj):
-    """Runs between every pair of neighbors."""
-    dx, dy, dz = pi[0] - pj[0], pi[1] - pj[1], pi[2] - pj[2]
-    dist_sq = dx * dx + dy * dy + dz * dz
-    length = math.sqrt(dist_sq)
-    if length < 1e-9:
-        return 0.0, 0.0, 0.0
+def attraction_forces(pos, edges):
+    """Runs between every pair of neighbors. Returns one force per edge, which
+    pushes its first node and pulls its second.
+    """
+    d = pos[edges[:, 0]] - pos[edges[:, 1]]
+    dist_sq = np.einsum("ij,ij->i", d, d)
+    length = np.sqrt(dist_sq)
     dist_6th = dist_sq * dist_sq * dist_sq * 0.05
     # Crosses zero at r = 60**(1/6) ~= 1.98: a pair further apart than that is
     # pulled together, a closer one is pushed apart.
     multiplier = 0.1 - (dist_6th - 1.0) / (dist_6th + 1.0) * 0.2
-    scale = multiplier / length
-    return dx * scale, dy * scale, dz * scale
+    with np.errstate(divide="ignore", invalid="ignore"):
+        scale = np.where(length < 1e-9, 0.0, multiplier / length)
+    return d * scale[:, None]
 
 
 def load_graph():
@@ -71,32 +74,20 @@ def load_graph():
 def relax(positions, edges, iterations, dt):
     names = list(positions)
     index = {name: i for i, name in enumerate(names)}
-    pos = [list(positions[name]) for name in names]
-    edge_indices = [(index[a], index[b]) for a, b in edges]
-    n = len(pos)
+    pos = np.array([positions[name] for name in names], dtype=float)
+    edge_indices = np.array([(index[a], index[b]) for a, b in edges], dtype=np.intp).reshape(-1, 2)
 
     root_index = index.get("")
     crown_index = index.get("44444")
 
     for step in range(iterations):
-        force = [[0.0, 0.0, 0.0] for _ in range(n)]
+        force = repulsion_forces(pos)
 
-        for i in range(n):
-            pi = pos[i]
-            for j in range(i + 1, n):
-                fx, fy, fz = repulsion_force(pi, pos[j])
-                force[i][0] += fx; force[i][1] += fy; force[i][2] += fz
-                force[j][0] -= fx; force[j][1] -= fy; force[j][2] -= fz
+        edge_force = attraction_forces(pos, edge_indices)
+        np.add.at(force, edge_indices[:, 0], edge_force)
+        np.subtract.at(force, edge_indices[:, 1], edge_force)
 
-        for i, j in edge_indices:
-            fx, fy, fz = attraction_force(pos[i], pos[j])
-            force[i][0] += fx; force[i][1] += fy; force[i][2] += fz
-            force[j][0] -= fx; force[j][1] -= fy; force[j][2] -= fz
-
-        for i in range(n):
-            pos[i][0] += force[i][0] * dt
-            pos[i][1] += force[i][1] * dt
-            pos[i][2] += force[i][2] * dt
+        pos += force * dt
 
         # The root (the empty board) is pinned at the origin
         # Also pin the crown at the top
@@ -105,7 +96,7 @@ def relax(positions, edges, iterations, dt):
 
         print(f"spread progress: {step + 1}/{iterations} iterations", file=sys.stderr)
 
-    return {name: tuple(pos[index[name]]) for name in names}
+    return {name: tuple(float(c) for c in pos[index[name]]) for name in names}
 
 
 def write_positions(path, board_to_xyz):
