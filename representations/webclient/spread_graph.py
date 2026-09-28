@@ -5,6 +5,7 @@ Every pair of nodes repels, and every edge attracts.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from pathlib import Path
 
@@ -19,9 +20,16 @@ import render  # noqa: E402
 
 POSITIONS = HERE / "positions.txt"
 
-DEFAULT_ITERATIONS = 100
-DEFAULT_INITIAL_DT = 100
-DEFAULT_FINAL_DT = 2
+DEFAULT_ITERATIONS = 200
+DEFAULT_INITIAL_DT = 100000
+DEFAULT_FINAL_DT = 1
+DEFAULT_SEED = 0
+
+ROOT_XYZ = (0.0, 0.0, 0.0)
+CROWN_XYZ = (0.0, -144.0, 0.0)
+# Starting positions fill a cube centered between the two pinned nodes.
+INITIAL_CENTER = np.array([0.0, -72.0, 0.0])
+INITIAL_HALF_WIDTH = 72.0
 
 
 def mirror_key(key):
@@ -57,19 +65,33 @@ def attraction_forces(pos, edges):
 
 
 def load_graph():
-    """The same node set render.py builds: names -> (x, y, z), and the edges
-    (Red's committed move, plus Yellow's covered replies) that connect them.
+    """The same node set render.py builds, and the edges (Red's committed move,
+    plus Yellow's covered replies) that connect them. The old positions.txt is
+    not read.
     """
-    dataset = render.build_graph(render.BRANCHES, render.STEADY_STATES, render.POSITIONS)
+    dataset = render.build_graph(render.BRANCHES, render.STEADY_STATES, None)
     nodes = dataset["nodes_to_use"]
-    positions = {name: (node["x"], node["y"], node["z"]) for name, node in nodes.items()}
     edges = [
         (name, neighbor)
         for name, node in nodes.items()
         if node["neighbors"]
         for neighbor in node["neighbors"]
     ]
-    return positions, edges
+    return list(nodes), edges
+
+
+def initial_positions(names, seed):
+    """A pseudorandom starting point for every node. Each node's draw depends
+    only on its own name and the seed, so a change elsewhere in the graph does
+    not move it.
+    """
+    positions = {}
+    for name in names:
+        digest = hashlib.sha256(f"{seed}:{name}".encode()).digest()
+        rng = np.random.default_rng(int.from_bytes(digest[:8], "little"))
+        offset = rng.uniform(-INITIAL_HALF_WIDTH, INITIAL_HALF_WIDTH, 3)
+        positions[name] = tuple(INITIAL_CENTER + offset)
+    return positions
 
 
 def relax(positions, edges, iterations, initial_dt, final_dt):
@@ -80,6 +102,8 @@ def relax(positions, edges, iterations, initial_dt, final_dt):
 
     root_index = index.get("")
     crown_index = index.get("44444")
+    pos[root_index] = ROOT_XYZ
+    pos[crown_index] = CROWN_XYZ
 
     for step in range(iterations):
         # Geometric interpolation between initial_dt and final_dt
@@ -94,8 +118,8 @@ def relax(positions, edges, iterations, initial_dt, final_dt):
 
         # The root (the empty board) is pinned at the origin
         # Also pin the crown at the top
-        pos[root_index] = [0.0, 0.0, 0.0]
-        pos[crown_index] = [0.0, -144.0, 0.0]
+        pos[root_index] = ROOT_XYZ
+        pos[crown_index] = CROWN_XYZ
 
         print(f"spread progress: {step + 1}/{iterations} iterations", file=sys.stderr)
 
@@ -121,10 +145,12 @@ def main():
     parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--initial_dt", type=float, default=DEFAULT_INITIAL_DT)
     parser.add_argument("--final_dt", type=float, default=DEFAULT_FINAL_DT)
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args()
 
-    positions, edges = load_graph()
-    print(f"loaded {len(positions):,} nodes and {len(edges):,} edges", file=sys.stderr)
+    names, edges = load_graph()
+    print(f"loaded {len(names):,} nodes and {len(edges):,} edges", file=sys.stderr)
+    positions = initial_positions(names, args.seed)
     relaxed = relax(positions, edges, args.iterations, args.initial_dt, args.final_dt)
 
     write_positions(POSITIONS, relaxed)
