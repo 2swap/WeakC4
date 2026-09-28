@@ -19,8 +19,9 @@ import render  # noqa: E402
 
 POSITIONS = HERE / "positions.txt"
 
-DEFAULT_ITERATIONS = 1
-DEFAULT_DT = 5
+DEFAULT_ITERATIONS = 100
+DEFAULT_INITIAL_DT = 100
+DEFAULT_FINAL_DT = 2
 
 
 def mirror_key(key):
@@ -71,7 +72,7 @@ def load_graph():
     return positions, edges
 
 
-def relax(positions, edges, iterations, dt):
+def relax(positions, edges, iterations, initial_dt, final_dt):
     names = list(positions)
     index = {name: i for i, name in enumerate(names)}
     pos = np.array([positions[name] for name in names], dtype=float)
@@ -81,6 +82,8 @@ def relax(positions, edges, iterations, dt):
     crown_index = index.get("44444")
 
     for step in range(iterations):
+        # Geometric interpolation between initial_dt and final_dt
+        dt = initial_dt * (final_dt / initial_dt) ** (step / (iterations - 1))
         force = repulsion_forces(pos)
 
         edge_force = attraction_forces(pos, edge_indices)
@@ -92,7 +95,7 @@ def relax(positions, edges, iterations, dt):
         # The root (the empty board) is pinned at the origin
         # Also pin the crown at the top
         pos[root_index] = [0.0, 0.0, 0.0]
-        pos[crown_index] = [0.0, 144.0, 0.0]
+        pos[crown_index] = [0.0, -144.0, 0.0]
 
         print(f"spread progress: {step + 1}/{iterations} iterations", file=sys.stderr)
 
@@ -116,12 +119,13 @@ def write_positions(path, board_to_xyz):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
-    parser.add_argument("--dt", type=float, default=DEFAULT_DT)
+    parser.add_argument("--initial_dt", type=float, default=DEFAULT_INITIAL_DT)
+    parser.add_argument("--final_dt", type=float, default=DEFAULT_FINAL_DT)
     args = parser.parse_args()
 
     positions, edges = load_graph()
     print(f"loaded {len(positions):,} nodes and {len(edges):,} edges", file=sys.stderr)
-    relaxed = relax(positions, edges, args.iterations, args.dt)
+    relaxed = relax(positions, edges, args.iterations, args.initial_dt, args.final_dt)
 
     write_positions(POSITIONS, relaxed)
     print(f"wrote {POSITIONS}", file=sys.stderr)
