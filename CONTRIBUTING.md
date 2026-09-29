@@ -55,10 +55,7 @@ expect to run it, delete what it names, and run it again until it is quiet.
 
 A diagram contribution edits those two files and nothing else. Each
 subdirectory of `representations/` builds its artifacts from them with a
-`render.py`, and those are rebuilt automatically after a change lands, so a
-pull request should leave them alone. The webclient's 3D layout is a separate
-case: `spread_graph.py` nudges `representations/webclient/positions.txt`
-rather than deriving it, so nothing regenerates it automatically.
+`render.py`. These need not be run or edited locally.
 
 ## What makes a diagram valid
 

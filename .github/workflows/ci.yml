@@ -1,12 +1,13 @@
 name: CI
 
-# Validation runs on everything. Rendering, committing and publishing are kept
-# to main, where the code is already merged.
+# Validation runs on everything. Rendering and publishing are kept to main,
+# where the code is already merged. The rendered files are never committed:
+# they exist only in the Pages artifact, so the history does not collect a
+# fresh copy of them with every change to the solution.
 #
 # The `if` on publish is load-bearing, not a formality: a pull request from a
 # branch in this repository gets whatever permissions the workflow asks for, so
-# without it every such branch would deploy the site and hold a write token
-# while still unmerged.
+# without it every such branch would deploy the site while still unmerged.
 # Fork pull requests are stopped by something else, GitHub forcing their token
 # read-only, which no setting on a public repository can undo.
 
@@ -52,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
-      contents: write
+      contents: read
       pages: write
       id-token: write
     # No cancel-in-progress: a deployment should finish rather than be killed
@@ -67,17 +68,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: {python-version: '3.12'}
-      - run: pip install --quiet protobuf
+      - run: pip install --quiet protobuf numpy
 
       - name: Render the representations
-        id: render
         run: |
           python representations/webclient/render.py
           python representations/protobuf/render.py
 
-      # Deploying here rather than from a separate workflow publishes the files
-      # this job just rendered. A push made with GITHUB_TOKEN starts no further
-      # run, so a deploy triggered by the commit below would never happen.
       - uses: actions/configure-pages@v5
       - name: Assemble the site
         run: |
@@ -85,45 +82,13 @@ jobs:
           # back with "../", so the two are served one level apart.
           mkdir _site
           cp sample.png _site/
+          cp representations/protobuf/solution.pb _site/
           cp -r representations/webclient/. _site/
           cp -r explanation _site/explanation
-          # The browser never fetches the scripts that build the page, or the
-          # layout file they read.
-          rm -rf _site/render.py _site/spread_graph.py _site/__pycache__ \
-                 _site/positions.txt
+          # The browser never fetches the scripts that build the page.
+          rm -rf _site/render.py _site/spread_graph.py _site/__pycache__
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
-
-      # Last, so publishing never waits on the push. Conditioned on the render
-      # rather than on the steps above, so a Pages failure does not throw the
-      # rendered files away, and a half-written render is never committed.
-      - name: Commit whatever changed
-        if: ${{ !cancelled() && steps.render.outcome == 'success' }}
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Staged before the check, so a newly generated file counts too.
-          git add representations/
-          if git diff --cached --quiet; then
-            echo "artifacts already up to date"
-            exit 0
-          fi
-          git commit -m "Rebuild representations"
-          # A commit landing on main while this ran rejects the push. That
-          # commit's own run renders the same files, so the next run fixes it.
-          git push
-
-      # Deliberately not conditioned on the step above: if that step stops
-      # running, through a renamed id or an edited condition, it skips in
-      # silence and the render is thrown away on a green run.
-      - name: Fail if the render was left uncommitted
-        if: ${{ !cancelled() }}
-        run: |
-          if [ -n "$(git status --porcelain -- representations/)" ]; then
-            git status --short -- representations/
-            echo "::error::the render changed files that were not committed"
-            exit 1
-          fi

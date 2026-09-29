@@ -1,3 +1,6 @@
-c4_full_prefixes.js
 **/__pycache__/
 solver/
+
+# Rendered by CI (or locally) and published to Pages
+representations/webclient/graph.js
+representations/protobuf/solution.pb

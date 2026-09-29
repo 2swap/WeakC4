@@ -438,31 +438,6 @@ $(document).ready(async function() {
 
         let tick = 0;
         let zoom = 1;
-        // Full 3x3 rotation matrix (row-major), built up from incremental
-        // screen-space rotations so dragging always yaws/pitches relative to
-        // the current view instead of fixed world axes (avoids gimbal-lock
-        // confusion between yaw and roll at steep pitch).
-        let rotM = [1,0,0, 0,1,0, 0,0,1];
-
-        function matMul3(a, b) {
-            const r = new Array(9);
-            for (let i = 0; i < 3; i++) {
-                for (let j = 0; j < 3; j++) {
-                    r[i*3+j] = a[i*3]*b[j] + a[i*3+1]*b[3+j] + a[i*3+2]*b[6+j];
-                }
-            }
-            return r;
-        }
-
-        function rotX(theta) {
-            const c = Math.cos(theta), s = Math.sin(theta);
-            return [1,0,0, 0,c,-s, 0,s,c];
-        }
-
-        function rotY(theta) {
-            const c = Math.cos(theta), s = Math.sin(theta);
-            return [c,0,s, 0,1,0, -s,0,c];
-        }
 
         nodes = {};
 
@@ -492,27 +467,22 @@ $(document).ready(async function() {
             var max_x = Number.NEGATIVE_INFINITY;
             var min_y = Number.POSITIVE_INFINITY;
             var max_y = Number.NEGATIVE_INFINITY;
-            var min_z = Number.POSITIVE_INFINITY;
-            var max_z = Number.NEGATIVE_INFINITY;
 
-            // Compute the min and max values for x, y, and z
+            // Compute the min and max values for x and y
             for (const name in nodes_to_use) {
                 const node = nodes_to_use[name];
                 min_x = Math.min(min_x, node.x);
                 max_x = Math.max(max_x, node.x);
                 min_y = Math.min(min_y, node.y);
                 max_y = Math.max(max_y, node.y);
-                min_z = Math.min(min_z, node.z);
-                max_z = Math.max(max_z, node.z);
             }
 
             // Calculate the center of the point cloud
             var center_x = (min_x + max_x) / 2;
             var center_y = (min_y + max_y) / 2;
-            var center_z = (min_z + max_z) / 2;
 
             // Calculate the scale factor
-            var max_dimension = Math.max(max_x - min_x, max_y - min_y, max_z - min_z);
+            var max_dimension = Math.max(max_x - min_x, max_y - min_y);
             var scale_factor = sqrtwh * .5 / max_dimension;
 
             // Apply the transformation to each node
@@ -520,13 +490,12 @@ $(document).ready(async function() {
                 var node = nodes_to_use[name];
                 node.x = (node.x - center_x) * scale_factor;
                 node.y = (node.y - center_y) * scale_factor;
-                node.z = (node.z - center_z) * scale_factor;
                 node.opacity = 1;
                 nodes[name] = node;
             }
         }
 
-        // Smoothed camera center, in rotated space. Eases toward the
+        // Smoothed camera center. Eases toward the
         // highlighted node instead of snapping straight to it, so switching
         // nodes glides rather than teleports.
         let camX = null, camY = null;
@@ -534,15 +503,14 @@ $(document).ready(async function() {
         function render_graph() {
             graphctx.globalAlpha = 1;
             graphctx.lineWidth = 0.5;
-            for (const name in nodes) rotate_node(name);
-            var targetX = nodes[hash].rx, targetY = nodes[hash].ry;
+            var targetX = nodes[hash].x, targetY = nodes[hash].y;
             if (camX === null) { camX = targetX; camY = targetY; }
             camX += (targetX - camX) * 0.08;
             camY += (targetY - camY) * 0.08;
             for (const name in nodes) {
                 var node = nodes[name];
-                node.screen_x = (node.rx - camX) / zoom + w / 2;
-                node.screen_y = (node.ry - camY) / zoom + h / 2;
+                node.screen_x = (node.x - camX) / zoom + w / 2;
+                node.screen_y = (node.y - camY) / zoom + h / 2;
             }
             for (const name in nodes) {
                 const node = nodes[name];
@@ -581,12 +549,6 @@ $(document).ready(async function() {
             document.getElementById("strongsolver").href = "https://connect4.gamesolver.org/?pos=" + nodes[hash].rep;
         }
 
-        function rotate_node (name) {
-            var node = nodes[name];
-            node.rx = rotM[0] * node.x + rotM[1] * node.y + rotM[2] * node.z;
-            node.ry = rotM[3] * node.x + rotM[4] * node.y + rotM[5] * node.z;
-        }
-
         function get_closest_node_to (coords) {
             var min_dist = 100000000;
             var best_node = "";
@@ -609,10 +571,9 @@ $(document).ready(async function() {
             }
         );
 
-        // Unified mouse/touch/pen handling: drag on the graph to rotate it,
-        // pinch with two pointers to zoom, tap/click a node to jump to it.
+        // Unified mouse/touch/pen handling: pinch with two pointers to zoom,
+        // tap/click a node to jump to it.
         let activePointers = new Map();
-        let dragLast = null;
         let dragStart = null;
         let pinchStartDist = null;
         let pinchStartZoom = null;
@@ -627,13 +588,12 @@ $(document).ready(async function() {
             graphcanvas.setPointerCapture(e.pointerId);
             activePointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
             if (activePointers.size === 1) {
-                dragLast = {x: e.clientX, y: e.clientY};
                 dragStart = {x: e.clientX, y: e.clientY};
                 dragMoved = false;
             } else if (activePointers.size === 2) {
                 pinchStartDist = pointerDist();
                 pinchStartZoom = zoom;
-                dragLast = null;
+                dragStart = null;
             }
         }, false);
 
@@ -644,21 +604,10 @@ $(document).ready(async function() {
             if (activePointers.size === 2 && pinchStartDist) {
                 zoom = pinchStartZoom * pinchStartDist / pointerDist();
                 render();
-            } else if (activePointers.size === 1 && dragLast) {
-                // Touch fires move events far more often than mouse, each
-                // with a tiny delta, so tap-vs-drag detection is based on
-                // total distance from the drag's start, not the per-event
-                // delta. The rotation itself is applied every event so it
-                // stays smooth even when individual deltas are small.
-                const dx = e.clientX - dragLast.x;
-                const dy = e.clientY - dragLast.y;
+            } else if (activePointers.size === 1 && dragStart) {
+                // A pointer that wanders off where it went down is not a tap,
+                // so lifting it does not jump to a node.
                 if (Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 4) dragMoved = true;
-                // Rotate about the view's current screen-space axes (a
-                // trackball), not fixed world axes, so drag direction
-                // always matches on-screen motion regardless of pitch.
-                rotM = matMul3(rotX(-dy * 0.01), matMul3(rotY(dx * 0.01), rotM));
-                render();
-                dragLast = {x: e.clientX, y: e.clientY};
             }
         }, false);
 
@@ -667,7 +616,6 @@ $(document).ready(async function() {
             const wasSingleTap = activePointers.size === 1 && !dragMoved;
             activePointers.delete(e.pointerId);
             pinchStartDist = null;
-            dragLast = null;
             dragStart = null;
             if (wasSingleTap) {
                 var rect = graphcanvas.getBoundingClientRect();

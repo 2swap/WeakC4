@@ -1,7 +1,6 @@
 """Build representations/webclient/graph.js from solution/.
 
     python render.py            # regenerate graph.js
-    python render.py --check    # fail if the committed graph.js is stale
     python render.py --report   # print node counts as JSON, write nothing
 
 solution/branches.json and solution/steady_states.json only record what a Red
@@ -12,16 +11,10 @@ validate_solution.check_graph re-derives it, by walking the game from the
 root. A Red-to-move board with no entry in either file needs neither, because
 Red already has an immediate win there; such boards are simply not rendered,
 since there is nothing further to click through to.
-
-3D layout comes from representations/webclient/positions.txt, which still has
-one entry per board of the original (undeduped) graph. A board only reachable
-in its mirror orientation borrows its mirror twin's coordinates, with x
-negated.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -31,9 +24,11 @@ sys.path.insert(0, str(SOLUTION_DIR))
 import validate_solution as solution  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import spread_graph  # noqa: E402
+
 BRANCHES = SOLUTION_DIR / "branches.json"
 STEADY_STATES = SOLUTION_DIR / "steady_states.json"
-POSITIONS = HERE / "positions.txt"
 OUT_JS = HERE / "graph.js"
 
 BOARD_H, BOARD_W, GAME_NAME = solution.ROWS, solution.COLS, "c4"
@@ -44,41 +39,7 @@ def mirror_key(key):
     return tuple(row[::-1] for row in key)
 
 
-def load_positions(path):
-    """positions.txt -> {board_key: (x, y, z)}, keyed by board rather than the
-    stored position string, so a board reachable only through its mirror twin
-    can still be found."""
-    coords = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        if not raw.strip() or raw.startswith("#"):
-            continue
-        position, x, y, z = raw.split(",")
-        coords[solution.board_key(position)] = (float(x), float(y), float(z))
-    return coords
-
-
-def lookup_coords(coords, key, fallback=None):
-    """The board's 3-D coordinate, borrowing its mirror twin's (with x negated)
-    when only that is stored. A board that neither positions.txt nor spread_graph
-    has placed yet - a subtree that just became reachable - starts a short
-    deterministic hop from its parent; spread_graph.py settles it properly on the
-    next run."""
-    if key in coords:
-        return coords[key]
-    if mirror_key(key) in coords:
-        x, y, z = coords[mirror_key(key)]
-        return -x, y, z
-    if fallback is None:
-        raise KeyError(key)
-    px, py, pz = fallback
-    seed = int(hashlib.md5(repr(key).encode()).hexdigest()[:6], 16)
-    hop = (((seed >> 0) & 7) - 3.5, ((seed >> 3) & 7) - 3.5, ((seed >> 6) & 7) - 3.5)
-    placed = (px + hop[0], py + hop[1], pz + hop[2])
-    coords[key] = placed
-    return placed
-
-
-def build_graph(branches_path, entries_path, positions_path):
+def build_graph(branches_path, entries_path):
     with open(branches_path, "r") as f:
         pre = json.load(f)
         red = {}
@@ -87,7 +48,6 @@ def build_graph(branches_path, entries_path, positions_path):
     with open(entries_path, "r") as f:
         raw_leaves = json.load(f)
         leaves = {solution.board_key_from_diagram(diagram): diagram for diagram in raw_leaves}
-    coords = load_positions(positions_path)
 
     def is_leaf(key):
         return key in leaves or mirror_key(key) in leaves
@@ -118,19 +78,18 @@ def build_graph(branches_path, entries_path, positions_path):
     # same name instead of inventing a second one nothing will ever build.
     canonical = {root_key: ""}
 
-    def name_for(key, candidate_position, parent_xyz):
+    def name_for(key, candidate_position):
         if key not in canonical:
             canonical[key] = candidate_position
-            stack.append((key, candidate_position, parent_xyz))
+            stack.append((key, candidate_position))
         return canonical[key]
 
-    stack = [(root_key, "", (0.0, 0.0, 0.0))]
+    stack = [(root_key, "")]
     while stack:
-        key, position, parent_xyz = stack.pop()
+        key, position = stack.pop()
         if key in seen:
             continue
         seen.add(key)
-        x, y, z = lookup_coords(coords, key, parent_xyz)
         red_to_move = len(position) % 2 == 0
 
         if red_to_move:
@@ -139,7 +98,7 @@ def build_graph(branches_path, entries_path, positions_path):
                 nodes[position] = {
                     "data": {"ss": diagram},
                     "neighbors": None,
-                    "rep": position, "x": x, "y": y, "z": z,
+                    "rep": position,
                 }
                 continue
             move = red_lookup(key)
@@ -149,11 +108,11 @@ def build_graph(branches_path, entries_path, positions_path):
                     continue  # instant win: nothing to render past here
                 raise AssertionError(f"no branch or leaf for reachable board at {position!r}")
             child_key = solution.board_key(position + move)
-            child_position = name_for(child_key, position + move, (x, y, z))
+            child_position = name_for(child_key, position + move)
             nodes[position] = {
                 "data": {"ss": BLANK_SS},
                 "neighbors": [child_position],
-                "rep": position, "x": x, "y": y, "z": z,
+                "rep": position,
             }
             continue
 
@@ -172,7 +131,7 @@ def build_graph(branches_path, entries_path, positions_path):
             excused = not won and any(solution._red_wins_now(board, c) for c in range(BOARD_W))
             board[row][col] = 0
             if covered:
-                children.append(name_for(after_key, position + str(col + 1), (x, y, z)))
+                children.append(name_for(after_key, position + str(col + 1)))
             elif not excused:
                 raise AssertionError(
                     f"Yellow reply in column {col + 1} at {position!r} is uncovered"
@@ -180,7 +139,7 @@ def build_graph(branches_path, entries_path, positions_path):
         nodes[position] = {
             "data": {"ss": BLANK_SS},
             "neighbors": children,
-            "rep": position, "x": x, "y": y, "z": z,
+            "rep": position,
         }
 
     return {
@@ -196,48 +155,62 @@ def render_js(dataset):
     return "var dataset = " + json.dumps(dataset, ensure_ascii=False, separators=(",", ":"))
 
 
-def build(branches_path=BRANCHES, entries_path=STEADY_STATES, positions_path=POSITIONS):
-    dataset = build_graph(branches_path, entries_path, positions_path)
-    nodes = dataset["nodes_to_use"]
+def place_nodes(nodes):
+    """Give every node its x, y from a fresh force-directed layout."""
+    edges = [
+        (name, neighbor)
+        for name, node in nodes.items()
+        if node["neighbors"]
+        for neighbor in node["neighbors"]
+    ]
+    by_board = {solution.board_key(name): name for name in nodes}
+    mirrors = {}
+    for name in nodes:
+        twin = by_board.get(mirror_key(solution.board_key(name)))
+        if twin is not None:
+            mirrors[name] = twin
+    for name, (x, y) in spread_graph.layout(list(nodes), edges, mirrors).items():
+        nodes[name].update(x=x, y=y)
+
+
+def count(nodes):
     leaves = sum(1 for node in nodes.values() if node["neighbors"] is None)
-    report = {"nodes": len(nodes), "leaves": leaves, "branches": len(nodes) - leaves}
+    return {"nodes": len(nodes), "leaves": leaves, "branches": len(nodes) - leaves}
+
+
+def build(branches_path=BRANCHES, entries_path=STEADY_STATES):
+    dataset = build_graph(branches_path, entries_path)
+    nodes = dataset["nodes_to_use"]
+    place_nodes(nodes)
     artifacts = {OUT_JS: render_js(dataset).encode("utf-8")}
-    return artifacts, report
+    return artifacts, count(nodes)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--branches", type=Path, default=BRANCHES)
     parser.add_argument("--entries", type=Path, default=STEADY_STATES)
-    parser.add_argument("--positions", type=Path, default=POSITIONS)
-    parser.add_argument("--check", action="store_true",
-                        help="compare against the committed graph.js, write nothing")
     parser.add_argument("--report", action="store_true",
                         help="print node counts as JSON, write nothing")
     args = parser.parse_args()
 
     try:
-        artifacts, report = build(args.branches, args.entries, args.positions)
+        if args.report:
+            # Counting needs only the graph, not the much slower layout.
+            report = count(build_graph(args.branches, args.entries)["nodes_to_use"])
+        else:
+            artifacts, report = build(args.branches, args.entries)
     except (ValueError, AssertionError) as error:
         print(f"error: {error}", file=sys.stderr)
         sys.exit(1)
 
-    if args.check:
-        report["stale"] = [
-            path.name for path, content in artifacts.items()
-            if not path.exists() or path.read_bytes() != content
-        ]
-        report["status"] = "OK" if not report["stale"] else "STALE"
-    elif args.report:
-        report["status"] = "OK"
-    else:
+    if not args.report:
         for path, content in artifacts.items():
             path.write_bytes(content)
         report["written"] = sorted(path.name for path in artifacts)
-        report["status"] = "OK"
+    report["status"] = "OK"
 
     print(json.dumps(report, indent=2, sort_keys=True))
-    sys.exit(1 if report["status"] != "OK" else 0)
 
 
 if __name__ == "__main__":
