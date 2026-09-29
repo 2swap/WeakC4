@@ -22,11 +22,11 @@ BRANCHES = SOLUTION_DIR / "branches.json"
 STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 OUT = HERE / "solution.pb"
 
-# 16 symbols -> one 4-bit nibble per cell: the 14 priority levels are 0..13,
-# a Red disk is 14 and a Yellow disk 15.
+# One 4-bit nibble per cell: the 10 priority levels are 0..9, a Red disk is 14
+# and a Yellow disk 15 (10..13 are unused).
 SYMBOLS = {ch: i for i, ch in enumerate(solution.LEVEL_CHARS)}
 SYMBOLS["R"], SYMBOLS["Y"] = 14, 15
-assert len(SYMBOLS) == 16
+assert len(SYMBOLS) == 12
 
 
 def pack_steady_state(diagram):

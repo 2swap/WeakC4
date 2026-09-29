@@ -223,7 +223,7 @@ function makeMoveAsRed(){
 function querySteadyState(boardArr, steadyState) {
     const ROWS = 6;
     const COLUMNS = 7;
-    const LEVELS = "0123456789abcd";
+    const LEVELS = "0123456789";
 
     function getColumnState(x) {
         for (let y = 0; y < ROWS; y++) {

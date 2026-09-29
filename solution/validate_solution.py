@@ -31,9 +31,7 @@ from pathlib import Path
 sys.setrecursionlimit(100_000)
 ROWS, COLS = 6, 7
 
-# Fourteen priority levels, 0 strongest ... d weakest. With the two disk colours
-# that is 16 symbols, i.e. exactly 4 bits per cell.
-LEVEL_CHARS = "0123456789abcd"
+LEVEL_CHARS = "0123456789"
 RED, YELLOW = "R", "Y"
 DISKS = RED + YELLOW
 KNOWN = set(LEVEL_CHARS + DISKS)
