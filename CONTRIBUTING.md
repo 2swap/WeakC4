@@ -10,6 +10,23 @@ every Yellow reply or it does not. CI runs that check for you.
 Everything that defines the solution lives in `solution/`. Two files are
 hand-edited.
 
+**`solution/branches.json`** maps Red-to-move nodes to what Red does there. The
+empty string is the empty board. A string value is the single column Red
+commits to; an integer value is the index of the steady-state diagram Red
+follows from there on:
+
+```json
+{
+  "": "4",
+  "41": "5",
+  "4153": "5",
+  "43637563356651": 170
+}
+```
+
+- Only one of each mirror-equivalent board is stored. The other orientation
+  is re-derived (mirroring the move or the diagram), so do not add both.
+
 **`solution/steady_states.json`** is a list of diagrams, each a list of six
 rows, top row first:
 
@@ -20,35 +37,19 @@ rows, top row first:
     "2222222",
     "2226262",
     "2246232",
-    "Y240R15",
-    "Y2YRRRY"
+    "0240015",
+    "0200000"
   ]
 ]
 ```
 
-- Exactly six rows of exactly seven characters.
-- `R` is a Red disk and `Y` a Yellow disk. Every other cell is a digit
-  `0`-`9`, giving that empty square's priority level in Red's
-  policy, where `0` is the strongest level. There is no blank cell.
-- The disks say which board a block belongs to, so it carries no separate
-  identifier.
-- Only one of each mirror-equivalent pair is stored. The other orientation is
-  re-derived when a representation is rendered, so do not add both.
+- Exactly six rows of exactly seven characters, each a digit `0`-`9` giving
+  that square's priority level in Red's policy, where `0` is the strongest
+  level. There is no blank cell.
 
-**`solution/branches.json`** maps each non-leaf Red-to-move node to the single
-column Red commits to there. The empty string is the empty board:
-
-```json
-{
-  "": "4",
-  "41": "5",
-  "4153": "5"
-}
-```
-
-The two files interact. A node that gains a diagram stops being a non-leaf
-node, so its entry comes out of `branches.json`. Anything that was only
-reachable through it comes out too, both its branches and its diagrams. The
+The two files interact. A node that gains a diagram has its string value
+replaced by the diagram's index. Anything that was only reachable through it
+comes out, both its entries and any diagrams nothing else points at. The
 validator rejects entries it cannot reach, so a contribution that only adds is
 usually incomplete. It reports the frontier rather than the whole set, so
 expect to run it, delete what it names, and run it again until it is quiet.

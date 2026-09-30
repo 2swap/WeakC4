@@ -4,7 +4,7 @@
     python render.py --report   # print node counts as JSON, write nothing
 
 solution/branches.json and solution/steady_states.json only record what a Red
-node commits to and what a leaf's diagram is (see solution/validate_solution.py
+node commits to or which diagram it follows (see solution/validate_solution.py
 for why). Everything else - Yellow's covered replies, and the mirror twin of
 any node that was deduped away - is re-derived here exactly as
 validate_solution.check_graph re-derives it, by walking the game from the
@@ -39,15 +39,27 @@ def mirror_key(key):
     return tuple(row[::-1] for row in key)
 
 
+def overlay_disks(board, diagram):
+    """The diagram with each of the board's disks drawn in as R/Y, for display."""
+    return ["".join("RY"[board[solution.ROWS - 1 - r][x] - 1] if board[solution.ROWS - 1 - r][x] else ch
+                    for x, ch in enumerate(row))
+            for r, row in enumerate(diagram)]
+
+
 def build_graph(branches_path, entries_path):
+    with open(entries_path, "r") as f:
+        diagrams = json.load(f)
     with open(branches_path, "r") as f:
         pre = json.load(f)
-        red = {}
-        for bs, move in pre.items():
-            red[solution.board_key(bs)] = move
-    with open(entries_path, "r") as f:
-        raw_leaves = json.load(f)
-        leaves = {solution.board_key_from_diagram(diagram): diagram for diagram in raw_leaves}
+    red = {}
+    leaves = {}
+    for bs, value in pre.items():
+        if solution.is_steady_state_entry(value):
+            # graph.js diagrams draw their own disks, as client.js expects.
+            board = solution.board_from_position(bs)
+            leaves[solution.board_key(bs)] = overlay_disks(board, diagrams[value])
+        else:
+            red[solution.board_key(bs)] = value
 
     def is_leaf(key):
         return key in leaves or mirror_key(key) in leaves

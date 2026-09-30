@@ -1,6 +1,6 @@
 """
 Print basic statistics about the solution and about how the graph is drawn.
-Reads steady_states.json and branches.json independently.
+Reads steady_states.json and branches.json.
 """
 from __future__ import annotations
 
@@ -33,14 +33,17 @@ def data_lines(path):
 def print_steady_states_stats():
     with open(STEADY_STATES, "r") as f:
         steady_states = json.load(f)
+    with open(BRANCHES, "r") as f:
+        branches = json.load(f)
 
+        entries = {k: v for k, v in branches.items() if solution.is_steady_state_entry(v)}
         by_length = {}
-        for diagram in steady_states:
-            disks = sum(1 for row in diagram for ch in row if (ch == 'R' or ch == 'Y'))
-            by_length[disks] = by_length.get(disks, 0) + 1
+        for position in entries:
+            by_length[len(position)] = by_length.get(len(position), 0) + 1
 
         cprint(COLOR_STEADY_STATES, f"total steady states: {len(steady_states)}")
-        cprint(COLOR_STEADY_STATES, "by ply count:")
+        cprint(COLOR_STEADY_STATES, f"total steady-state entries in branches.json: {len(entries)}")
+        cprint(COLOR_STEADY_STATES, "entries by ply count:")
         for length in sorted(by_length):
             cprint(COLOR_STEADY_STATES, f"  {length:3d}-ply: {by_length[length]}")
 
@@ -51,6 +54,8 @@ def print_branches_stats():
         yellow_edges = []
         branches = json.load(f)
         for k,v in branches.items():
+            if solution.is_steady_state_entry(v):
+                continue
             red.add(k)
             yellow_edges.append(solution.board_key(k + v))
 

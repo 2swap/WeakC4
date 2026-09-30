@@ -41,7 +41,8 @@ def build_branches():
     create_anki_deck(deck)
 
     branches = json.loads(BRANCHES.read_text())
-    cards = [("learn:" + position, move) for position, move in branches.items()]
+    cards = [("learn:" + position, move) for position, move in branches.items()
+             if not solution.is_steady_state_entry(move)]
     cards.sort(key=lambda card: (len(card[0]), card[0]))
 
     notes = [{
@@ -58,12 +59,22 @@ def build_branches():
     anki_connect("addNotes", { "notes": notes } )
     print(f"Added {len(notes)} branch cards to Anki.")
 
+def overlay_disks(board, diagram):
+    """The diagram with each of the board's disks drawn in as R/Y, for display."""
+    return ["".join("RY"[board[solution.ROWS - 1 - r][x] - 1] if board[solution.ROWS - 1 - r][x] else ch
+                    for x, ch in enumerate(row))
+            for r, row in enumerate(diagram)]
+
 def build_steady_states():
     print("Building steady state cards...")
     deck = deck_name + "::3. Leaves"
     create_anki_deck(deck)
 
+    branches = json.loads(BRANCHES.read_text())
     steady_states = json.loads(STEADY_STATES.read_text())
+    # One card per entry in branches.txt.
+    diagrams = [overlay_disks(solution.board_from_position(position), steady_states[index])
+                for position, index in branches.items() if solution.is_steady_state_entry(index)]
     notes = [{
         "deckName": deck,
         "modelName": steady_model_name,
@@ -73,7 +84,7 @@ def build_steady_states():
         "options": {
             "allowDuplicate": False
         },
-    } for diagram in steady_states]
+    } for diagram in diagrams]
     anki_connect("addNotes", { "notes": notes } )
     print(f"Added {len(notes)} steady state cards to Anki.")
 
@@ -89,9 +100,11 @@ def _canon(key):
 def _legal_columns(board):
     return [c for c in range(solution.COLS) if solution.col_height(board, c) < solution.ROWS]
 
-def _build_lookup(branches, steady_states):
-    red = {solution.board_key(position): move for position, move in branches.items()}
-    leaves = {solution.board_key_from_diagram(diagram) for diagram in steady_states}
+def _build_lookup(branches):
+    red = {solution.board_key(position): move for position, move in branches.items()
+           if not solution.is_steady_state_entry(move)}
+    leaves = {solution.board_key(position) for position, index in branches.items()
+              if solution.is_steady_state_entry(index)}
 
     def red_lookup(key):
         if key in red:
@@ -176,8 +189,7 @@ def build_practice():
     create_anki_deck(deck)
 
     branches = json.loads(BRANCHES.read_text())
-    steady_states = json.loads(STEADY_STATES.read_text())
-    red_lookup, is_leaf = _build_lookup(branches, steady_states)
+    red_lookup, is_leaf = _build_lookup(branches)
 
     sequences = sorted(set(_build_practice_sequences(red_lookup, is_leaf, random.Random(42))))
 

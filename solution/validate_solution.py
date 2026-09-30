@@ -2,20 +2,26 @@
 
 This file is the machine-readable definition of "valid solution" for this repository.
 
+branches.json maps Red-to-move positions to one of two kinds of value:
+  - a string "1".."7": Red commits to that column (a branch);
+  - an integer: follow the steady state at that index of steady_states.json.
+A steady state is a pure level layout with no disks; the board it applies to
+is the one its branches.json key spells out.
+
 Specifically, we check that:
 (0) JSON structure of steady_states.json is valid
 (1) JSON structure of branches.json is valid
-(2) branches.json contains the empty board
-(3) No two steady states start from the same board, or mirror boards.
-(4) No two branch entries start from the same board, or mirror boards.
+(2) branches.json contains the empty board, as a branch
+(3) No two steady states are identical.
+(4) No two branches.json entries start from the same board, or mirror boards.
 (5) For each yellow-to-move node, all children satisfy exactly one of the following:
-    (a) being present as a key in branches,
-    (b) being a steady state,
+    (a) being present as a branch in branches.json,
+    (b) being present as a steady-state entry in branches.json,
     (c) red is able to win on the next move.
-[During step 6, compute coverage over the branches keyset and steadystate boardset]
-(6) No branch entries are extraneous/unreachable in the solution.
-(7) No steady states are extraneous/unreachable in the solution.
-(8) All steady states pass validation.
+[During step 5, compute coverage over the branches.json keyset]
+(6) No branches.json entries are extraneous/unreachable in the solution.
+(7) No steady states are unreferenced by branches.json.
+(8) Every steady-state entry wins from its board, and its disk cells hold 0.
 """
 from __future__ import annotations
 
@@ -32,9 +38,6 @@ sys.setrecursionlimit(100_000)
 ROWS, COLS = 6, 7
 
 LEVEL_CHARS = "0123456789"
-RED, YELLOW = "R", "Y"
-DISKS = RED + YELLOW
-KNOWN = set(LEVEL_CHARS + DISKS)
 
 HERE = Path(__file__).resolve().parent
 BRANCHES = HERE / "branches.json"
@@ -87,27 +90,6 @@ def mirror_diagram(diagram):
     return [row[::-1] for row in diagram]
 
 
-def board_from_diagram(diagram):
-    """The disks a diagram draws, as a board[y][x] (y=0 bottom row).
-
-    A diagram is the only record of its board now that steady_states.json
-    keeps one representative per mirror-equivalent pair (see
-    dedupe_mirrors.py) and stores no position string at all: many move
-    sequences, and now also both mirror images, can lead to the same board.
-    """
-    board = [[0] * COLS for _ in range(ROWS)]
-    for row_from_top, row in enumerate(diagram):
-        y = ROWS - 1 - row_from_top
-        for x, ch in enumerate(row):
-            if ch in DISKS:
-                board[y][x] = DISKS.index(ch) + 1
-    return board
-
-
-def board_key_from_diagram(diagram):
-    return tuple(tuple(row) for row in board_from_diagram(diagram))
-
-
 # --------------------------------------------------------------------------
 # the policy and the exhaustive check
 # --------------------------------------------------------------------------
@@ -148,15 +130,9 @@ def query_steady_state(board, diagram):
     return None
 
 
-def verify_leaf(diagram):
-    """True iff Red, following the diagram, beats every Yellow continuation.
-
-    Depends on nothing but the diagram, which is why a diagram already in the
-    graph never needs rechecking when a different one is added. The board it
-    starts from is the diagram's own disks, not a position string: a diagram
-    is the only record of its board now that steady_states.json keeps one
-    representative per mirror-equivalent pair and carries no position at all.
-    """
+def verify_leaf(diagram, board):
+    """True iff Red, following the diagram from board, beats every Yellow
+    continuation."""
     memo = {}
 
     def red_turn(board):
@@ -196,7 +172,7 @@ def verify_leaf(diagram):
         memo[key] = True
         return True
 
-    board = board_from_diagram(diagram)
+    board = [row[:] for row in board]
     if board_has_four(board):
         return False  # somebody has already won; nothing to play for
     return red_turn(board)
@@ -219,16 +195,14 @@ def load_branches(path):
         return json.load(f)
 
 
+def is_steady_state_entry(value):
+    """A branches.json value that is a steady state index, not a move."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def load_steady_states(path):
     with open(path, "r") as f:
         return json.load(f)
-
-
-def write_steady_states(path, steady_states):
-    blocks = ["[\n" + ",\n".join(f'    "{row}"' for row in diagram) + "\n  ]"
-              for diagram in steady_states]
-    with open(path, "w") as f:
-        f.write("[\n  " + ", ".join(blocks) + "\n]\n")
 
 
 def board_has_four(board):
@@ -269,56 +243,63 @@ def check_steady_state_json_valid(steady_states):
                     f"steady_states.json[{i}]: each row must be a {COLS}-character "
                     f"string, got {row!r}"
                 )
-            unknown = set(row) - KNOWN
+            unknown = set(row) - set(LEVEL_CHARS)
             if unknown:
                 raise ValueError(
                     f"steady_states.json[{i}]: unknown characters {sorted(unknown)}"
                 )
 
 
-def check_branches_json_valid(branches):
+def check_branches_json_valid(branches, steady_states):
     """(1) JSON structure of branches.json is valid."""
     if not isinstance(branches, dict):
         raise ValueError("branches.json must be a JSON object")
-    for position, move in branches.items():
-        if not isinstance(move, str) or move not in "1234567":
+    for position, value in branches.items():
+        if is_steady_state_entry(value):
+            if not 0 <= value < len(steady_states):
+                raise ValueError(
+                    f"branches.json[{position!r}]: steady state index {value} is out of "
+                    f"range (steady_states.json has {len(steady_states)})"
+                )
+        elif not isinstance(value, str) or len(value) != 1 or value not in "1234567":
             raise ValueError(
-                f"branches.json[{position!r}]: move must be one of '1'-'7', got {move!r}"
+                f"branches.json[{position!r}]: value must be a move '1'-'7' or a steady "
+                f"state index, got {value!r}"
             )
         if len(position) % 2:
             raise ValueError(
-                f"branches.json: position {position!r} is Yellow to move; branches "
+                f"branches.json: position {position!r} is Yellow to move; entries "
                 "are only defined for Red to move (even length)"
             )
         try:
             board_from_position(position)
         except ValueError:
             raise ValueError(
-                f"branches.json: position {position!r} overflows a column"
+                f"branches.json: position {position!r} is illegal"
             ) from None
 
 
 def check_branches_contains_empty_board(branches):
-    """(2) branches.json contains the empty board."""
-    if "" not in branches:
-        raise AssertionError("branches.json does not contain the empty board (the root)")
+    """(2) branches.json contains the empty board, as a branch."""
+    if not isinstance(branches.get(""), str):
+        raise AssertionError("branches.json does not contain the empty board (the root) as a branch")
 
 
 def check_steady_states_unique(steady_states):
-    """(3) No two steady states start from the same board, or mirror boards."""
+    """(3) No two steady states are identical."""
     seen = {}
     failures = []
     for i, diagram in enumerate(steady_states):
-        canon = min(board_key_from_diagram(diagram), mirror_key(board_key_from_diagram(diagram)))
-        if canon in seen:
-            failures.append([i, f"duplicates the board at index {seen[canon]} (up to mirroring)"])
+        key = tuple(diagram)
+        if key in seen:
+            failures.append([i, f"duplicates the steady state at index {seen[key]}"])
         else:
-            seen[canon] = i
+            seen[key] = i
     return failures
 
 
 def check_branches_unique(branches):
-    """(4) No two branch entries start from the same board, or mirror boards."""
+    """(4) No two branches.json entries start from the same board, or mirror boards."""
     seen = {}
     failures = []
     for position in branches:
@@ -333,20 +314,17 @@ def check_branches_unique(branches):
     return failures
 
 
-def check_yellow_children(branches, steady_states):
-    used_branches = set()
-    used_steady_states = set()
+def check_yellow_children(branches):
+    used_entries = set()
     failures = []
-    steady_keys = {board_key_from_diagram(diagram): i for i, diagram in enumerate(steady_states)}
-    steady_canon = {}
-    for key, i in steady_keys.items():
-        steady_canon[min(key, mirror_key(key))] = i
-    branch_canon = {}
+    entry_canon = {}
     for p in branches:
         key = board_key(p)
-        branch_canon[min(key, mirror_key(key))] = p
+        entry_canon[min(key, mirror_key(key))] = p
 
     for position, rmove in branches.items():
+        if is_steady_state_entry(rmove):
+            continue
         board = board_from_position(position + rmove)
         for ymove in '1234567':
             x = int(ymove) - 1
@@ -361,52 +339,65 @@ def check_yellow_children(branches, steady_states):
                                  "Yellow wins the game with this reply"])
                 continue
             child_key = tuple(tuple(row) for row in child)
-            canon = min(child_key, mirror_key(child_key))
+            entry = entry_canon.get(min(child_key, mirror_key(child_key)))
 
-            has_steady_state = canon in steady_canon
-            has_branch = canon in branch_canon
+            has_branch = entry is not None and not is_steady_state_entry(branches[entry])
+            has_steady_state = entry is not None and is_steady_state_entry(branches[entry])
             has_rtw = False
-            if has_steady_state:
-                used_steady_states.add(steady_canon[canon])
-            if has_branch:
-                used_branches.add(branch_canon[canon])
+            if entry is not None:
+                used_entries.add(entry)
             for rx in range(COLS):
                 if _red_wins_now(child, rx):
                     has_rtw = True
                     break
             if sum(bool(v) for v in (has_branch, has_steady_state, has_rtw)) != 1:
                 failures.append([position, rmove, ymove, "does not satisfy exactly one of", has_branch, has_steady_state, has_rtw])
-    return failures, used_branches, used_steady_states
+    return failures, used_entries
 
 
-def check_no_extraneous_branches(branches, used_branches):
+def check_no_extraneous_branches(branches, used_entries):
     failures = []
     for position in branches:
-        if position != "" and position not in used_branches:
-            failures.append([position, "branch is extraneous/unreachable"])
+        if position != "" and position not in used_entries:
+            failures.append([position, "entry is extraneous/unreachable"])
     return failures
 
 
-def check_no_extraneous_steady_states(steady_states, used_steady_states):
+def check_no_extraneous_steady_states(branches, steady_states):
+    referenced = {v for v in branches.values() if is_steady_state_entry(v)}
     failures = []
     for i in range(len(steady_states)):
-        if i not in used_steady_states:
-            failures.append([i, "steady state is extraneous/unreachable"])
+        if i not in referenced:
+            failures.append([i, "steady state is not referenced by branches.json"])
     return failures
 
 
-def check_steady_states_correct(steady_states, jobs):
-    """(8) All steady states pass validation."""
-    if jobs > 1 and len(steady_states) > 1:
+def _verify_entry(job):
+    position, diagram = job
+    board = board_from_position(position)
+    for r, row in enumerate(diagram):
+        for x, ch in enumerate(row):
+            if board[ROWS - 1 - r][x] and ch != "0":
+                return "a cell under a disk holds a level other than 0"
+    if not verify_leaf(diagram, board):
+        return "diagram fails against some Yellow line"
+    return None
+
+
+def check_steady_states_correct(branches, steady_states, jobs):
+    """(8) Every steady-state entry wins from its board, and its disk cells hold 0."""
+    entries = [(p, v) for p, v in branches.items() if is_steady_state_entry(v)]
+    work = [(p, steady_states[v]) for p, v in entries]
+    if jobs > 1 and len(work) > 1:
         with multiprocessing.Pool(jobs) as pool:
-            verdicts = pool.map(verify_leaf, steady_states, chunksize=8)
+            verdicts = pool.map(_verify_entry, work, chunksize=8)
     else:
-        verdicts = [verify_leaf(diagram) for diagram in steady_states]
+        verdicts = [_verify_entry(job) for job in work]
 
     failures = []
-    for i, ok in enumerate(verdicts):
-        if not ok:
-            failures.append([i, "diagram fails against some Yellow line"])
+    for (position, i), problem in zip(entries, verdicts):
+        if problem:
+            failures.append([position, i, problem])
     return failures
 
 
@@ -414,8 +405,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--jobs", type=int, default=0, metavar="N",
                         help="parallel processes (default: one per core)")
-    parser.add_argument("--prune", action="store_true",
-                        help="delete unreachable steady states from steady_states.json")
     args = parser.parse_args()
 
     # On Windows stdout falls back to the ANSI codepage whenever it is not a
@@ -450,33 +439,24 @@ def main():
     record(0, "steady_states.json is structurally valid",
            lambda: check_steady_state_json_valid(steady_states))
     record(1, "branches.json is structurally valid",
-           lambda: check_branches_json_valid(branches))
-    record(2, "branches.json contains the empty board",
+           lambda: check_branches_json_valid(branches, steady_states))
+    record(2, "branches.json contains the empty board as a branch",
            lambda: check_branches_contains_empty_board(branches))
-    record(3, "no two steady states share a board (up to mirroring)",
+    record(3, "no two steady states are identical",
            lambda: check_steady_states_unique(steady_states))
-    record(4, "no two branches share a board (up to mirroring)",
+    record(4, "no two branches.json entries share a board (up to mirroring)",
            lambda: check_branches_unique(branches))
-    yellow_failures, used_branches, used_steady_states = check_yellow_children(branches, steady_states)
+    yellow_failures, used_entries = check_yellow_children(branches)
     checks.append((
         5, "every Yellow reply is covered by exactly one of branch/steady-state/immediate-win",
         not yellow_failures, [str(row) for row in yellow_failures],
     ))
-
-    pruned = []
-    if args.prune:
-        pruned = [i for i in range(len(steady_states)) if i not in used_steady_states]
-        if pruned:
-            steady_states = [d for i, d in enumerate(steady_states) if i in used_steady_states]
-            write_steady_states(STEADY_STATES, steady_states)
-            used_steady_states = set(range(len(steady_states)))
-
-    record(6, "no branch is extraneous/unreachable",
-           lambda: check_no_extraneous_branches(branches, used_branches))
-    record(7, "no steady state is extraneous/unreachable",
-           lambda: check_no_extraneous_steady_states(steady_states, used_steady_states))
-    record(8, "all steady states pass validation",
-           lambda: check_steady_states_correct(steady_states, jobs))
+    record(6, "no branches.json entry is extraneous/unreachable",
+           lambda: check_no_extraneous_branches(branches, used_entries))
+    record(7, "every steady state is referenced by branches.json",
+           lambda: check_no_extraneous_steady_states(branches, steady_states))
+    record(8, "all steady-state entries pass validation",
+           lambda: check_steady_states_correct(branches, steady_states, jobs))
 
     ok = all(passed for _, _, passed, _ in checks)
     elapsed = time.time() - started
@@ -484,10 +464,6 @@ def main():
     lines = [
         "# Solution validation", "",
         f"_completed in {elapsed:.1f}s_", "",
-    ]
-    if pruned:
-        lines += [f"_pruned {len(pruned)} unreachable steady state(s) from steady_states.json_", ""]
-    lines += [
         "| # | result | check",
         "|---|--------|",
     ]

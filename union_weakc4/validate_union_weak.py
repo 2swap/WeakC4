@@ -39,8 +39,16 @@ def lower_bound(moves):
 
 
 @functools.cache
-def is_steady_state(solution):
-    return V.verify_leaf(solution.split("/"))
+def is_steady_state(solution, moves):
+    """A diagram of 0-9 levels that wins from the board moves spells out,
+    holding 0 under every disk."""
+    diagram = solution.split("/")
+    if len(diagram) != V.ROWS or any(len(row) != V.COLS or set(row) - set(V.LEVEL_CHARS) for row in diagram):
+        return False
+    board = V.board_from_position(moves)
+    if any(board[V.ROWS - 1 - r][x] and ch != "0" for r, row in enumerate(diagram) for x, ch in enumerate(row)):
+        return False
+    return V.verify_leaf(diagram, board)
 
 
 def winner(binary, position):
@@ -106,8 +114,7 @@ def main():
             if weight != 0:
                 fail(node, "weight should be 0")
         elif "solution" in node.attrib:
-            solution = node.get("solution")
-            if V.board_key_from_diagram(solution.split("/")) != V.board_key(moves) or not is_steady_state(solution):
+            if not is_steady_state(node.get("solution"), moves):
                 fail(node, "solution is not a valid steady state for this board")
             if children:
                 fail(node, "a node with a solution has no children")

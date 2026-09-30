@@ -2,7 +2,10 @@ syntax = "proto3";
 
 message Branch {
   bytes rep = 1; // Sequence of 3-byte entries constructing the input
-  uint32 move = 2; // Always 3 bytes: response is in [0...7] inclusive.
+  oneof value {
+    uint32 move = 2; // Always 3 bytes: response is in [0...7] inclusive.
+    uint32 steady_state = 3; // Index into SteadyStates.steadystates to follow from here.
+  }
 }
 
 message Branches {
@@ -10,8 +13,8 @@ message Branches {
 }
 
 message SteadyState {
-  bytes steadystate = 1; // 16 symbols (levels 0-13 = '0'..'d', 14 = Red, 15 = Yellow), 4 bits per cell,
-                         // 42 cells column-major bottom-to-top, first cell in the high nibble -> 21 bytes
+  bytes steadystate = 1; // levels 0-9, 4 bits per cell, 42 cells column-major bottom-to-top,
+                         // first cell in the high nibble -> 21 bytes
 }
 
 message SteadyStates {

@@ -22,11 +22,8 @@ BRANCHES = SOLUTION_DIR / "branches.json"
 STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 OUT = HERE / "solution.pb"
 
-# One 4-bit nibble per cell: the 10 priority levels are 0..9, a Red disk is 14
-# and a Yellow disk 15 (10..13 are unused).
+# One 4-bit nibble per cell holding a priority level 0..9.
 SYMBOLS = {ch: i for i, ch in enumerate(solution.LEVEL_CHARS)}
-SYMBOLS["R"], SYMBOLS["Y"] = 14, 15
-assert len(SYMBOLS) == 12
 
 
 def pack_steady_state(diagram):
@@ -40,10 +37,13 @@ def pack_steady_state(diagram):
 
 def build_branches(branches):
     message = format_pb2.Branches()
-    for position, move in branches.items():
+    for position, value in branches.items():
         branch = message.branches.add()
         branch.rep = bytes(int(ch) for ch in position)
-        branch.move = int(move)
+        if solution.is_steady_state_entry(value):
+            branch.steady_state = value
+        else:
+            branch.move = int(value)
     return message
 
 
@@ -66,7 +66,7 @@ def main():
 
     combined = format_pb2.Solution()
     combined.branches.CopyFrom(branches)
-    combined.steady_states.CopyFrom(steady_states)
+    combined.steadystates.CopyFrom(steady_states)
 
     print(f"Branches size (bytes): {len(branches.SerializeToString())}")
     print(f"SteadySt size (bytes): {len(steady_states.SerializeToString())}")
