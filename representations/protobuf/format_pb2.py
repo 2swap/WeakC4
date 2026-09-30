@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0c\x66ormat.proto\"F\n\x06\x42ranch\x12\x0b\n\x03rep\x18\x01 \x01(\x0c\x12\x0e\n\x04move\x18\x02 \x01(\rH\x00\x12\x16\n\x0csteady_state\x18\x03 \x01(\rH\x00\x42\x07\n\x05value\"%\n\x08\x42ranches\x12\x19\n\x08\x62ranches\x18\x01 \x03(\x0b\x32\x07.Branch\"\"\n\x0bSteadyState\x12\x13\n\x0bsteadystate\x18\x01 \x01(\x0c\"2\n\x0cSteadyStates\x12\"\n\x0csteadystates\x18\x01 \x03(\x0b\x32\x0c.SteadyState\"L\n\x08Solution\x12\x1b\n\x08\x62ranches\x18\x01 \x01(\x0b\x32\t.Branches\x12#\n\x0csteadystates\x18\x02 \x01(\x0b\x32\r.SteadyStatesb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0c\x66ormat.proto\"\x16\n\x06\x42ranch\x12\x0c\n\x04node\x18\x01 \x01(\x0c\"%\n\x08\x42ranches\x12\x19\n\x08\x62ranches\x18\x01 \x03(\x0b\x32\x07.Branch\"\"\n\x0bSteadyState\x12\x13\n\x0bsteadystate\x18\x01 \x01(\x0c\"2\n\x0cSteadyStates\x12\"\n\x0csteadystates\x18\x01 \x03(\x0b\x32\x0c.SteadyState\"L\n\x08Solution\x12\x1b\n\x08\x62ranches\x18\x01 \x01(\x0b\x32\t.Branches\x12#\n\x0csteadystates\x18\x02 \x01(\x0b\x32\r.SteadyStatesb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,13 +32,13 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'format_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_BRANCH']._serialized_start=16
-  _globals['_BRANCH']._serialized_end=86
-  _globals['_BRANCHES']._serialized_start=88
-  _globals['_BRANCHES']._serialized_end=125
-  _globals['_STEADYSTATE']._serialized_start=127
-  _globals['_STEADYSTATE']._serialized_end=161
-  _globals['_STEADYSTATES']._serialized_start=163
-  _globals['_STEADYSTATES']._serialized_end=213
-  _globals['_SOLUTION']._serialized_start=215
-  _globals['_SOLUTION']._serialized_end=291
+  _globals['_BRANCH']._serialized_end=38
+  _globals['_BRANCHES']._serialized_start=40
+  _globals['_BRANCHES']._serialized_end=77
+  _globals['_STEADYSTATE']._serialized_start=79
+  _globals['_STEADYSTATE']._serialized_end=113
+  _globals['_STEADYSTATES']._serialized_start=115
+  _globals['_STEADYSTATES']._serialized_end=165
+  _globals['_SOLUTION']._serialized_start=167
+  _globals['_SOLUTION']._serialized_end=243
 # @@protoc_insertion_point(module_scope)

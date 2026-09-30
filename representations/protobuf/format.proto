@@ -1,11 +1,20 @@
 syntax = "proto3";
 
 message Branch {
-  bytes rep = 1; // Sequence of 3-byte entries constructing the input
-  oneof value {
-    uint32 move = 2; // Always 3 bytes: response is in [0...7] inclusive.
-    uint32 steady_state = 3; // Index into SteadyStates.steadystates to follow from here.
-  }
+  bytes node = 1; // Bit-packed, most significant bit first, zero-padded to whole bytes:
+                  //   3 bits: Red's column, 1-7.
+                  //   7 references of W bits each, one per Yellow reply in columns 1-7
+                  //   (read in this node's own orientation), each one of:
+                  //     0                    no continuation: the column is full, or Red
+                  //                          wins immediately on the next move;
+                  //     1 + 2*id + mirrored  the node the reply reaches, where id < B is
+                  //                          Branches.branches[id] and id >= B is
+                  //                          SteadyStates.steadystates[id - B], and mirrored
+                  //                          says the reply's board is that node's mirror image.
+                  //                          A board that is its own mirror image is always
+                  //                          read unmirrored.
+                  // B = the number of branches, S = the number of steady states, and
+                  // W = bit length of 2*(B+S): the smallest width that holds every reference.
 }
 
 message Branches {
@@ -13,8 +22,8 @@ message Branches {
 }
 
 message SteadyState {
-  bytes steadystate = 1; // levels 0-9, 4 bits per cell, 42 cells column-major bottom-to-top,
-                         // first cell in the high nibble -> 21 bytes
+  bytes steadystate = 1; // levels 0-9, 42 cells column-major bottom-to-top, read as one base-10
+                         // integer (first cell most significant), big-endian -> at most 18 bytes
 }
 
 message SteadyStates {

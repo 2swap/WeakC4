@@ -22,28 +22,63 @@ BRANCHES = SOLUTION_DIR / "branches.json"
 STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 OUT = HERE / "solution.pb"
 
-# One 4-bit nibble per cell holding a priority level 0..9.
 SYMBOLS = {ch: i for i, ch in enumerate(solution.LEVEL_CHARS)}
 
 
 def pack_steady_state(diagram):
-    """42 cells, column-major, bottom to top, two cells per byte (first cell in
-    the high nibble): always exactly 21 bytes."""
+    """42 cells, column-major, bottom to top, read as one base-10 integer (first
+    cell most significant), big-endian in as few bytes as it needs: at most
+    ceil(log2(10^42) / 8) = 18. The cell count is fixed, so the leading zeros
+    a short encoding drops are recoverable."""
+    value = 0
     board_h = len(diagram)
     board_w = len(diagram[0])
-    cells = [SYMBOLS[diagram[board_h - 1 - y][x]] for x in range(board_w) for y in range(board_h)]
-    return bytes((cells[i] << 4) | cells[i + 1] for i in range(0, len(cells), 2))
+    for x in range(board_w):
+        for y in range(board_h):
+            value = value * len(SYMBOLS) + SYMBOLS[diagram[board_h - 1 - y][x]]
+    num_bytes_needed = (value.bit_length() + 7) >> 3
+    return value.to_bytes(num_bytes_needed, "big")
 
 
-def build_branches(branches):
-    message = format_pb2.Branches()
+MOVE_BITS = 3
+
+
+def build_branches(branches, num_steady_states):
+    """One Branch per string entry of branches.json, in file order (so the
+    empty board is index 0). Each stores Red's column and a reference per
+    Yellow reply to the branch or steady state that reply reaches; the
+    starting positions themselves are not stored."""
+    red = [position for position, value in branches.items()
+           if not solution.is_steady_state_entry(value)]
+    assert red[0] == ""
+    branch_id = {position: i for i, position in enumerate(red)}
+
+    # Every entry's board and its mirror image, each pointing at the entry's
+    # target id and whether the board is the mirror of the stored one.
+    targets = {}
     for position, value in branches.items():
-        branch = message.branches.add()
-        branch.rep = bytes(int(ch) for ch in position)
-        if solution.is_steady_state_entry(value):
-            branch.steady_state = value
-        else:
-            branch.move = int(value)
+        target = (len(red) + value if solution.is_steady_state_entry(value)
+                  else branch_id[position])
+        key = solution.board_key(position)
+        targets[key] = (target, 0)
+        targets.setdefault(solution.mirror_key(key), (target, 1))
+
+    width = (2 * (len(red) + num_steady_states)).bit_length()
+    message = format_pb2.Branches()
+    for position in red:
+        move = branches[position]
+        board = solution.board_from_position(position + move)
+        value = int(move)
+        for ymove in "1234567":
+            reference = 0
+            if solution.col_height(board, int(ymove) - 1) < solution.ROWS:
+                target = targets.get(solution.board_key(position + move + ymove))
+                if target is not None:
+                    reference = 1 + 2 * target[0] + target[1]
+            value = (value << width) | reference
+        bits = MOVE_BITS + 7 * width
+        num_bytes = (bits + 7) >> 3
+        message.branches.add().node = (value << (8 * num_bytes - bits)).to_bytes(num_bytes, "big")
     return message
 
 
@@ -61,7 +96,7 @@ def main():
     with open(STEADY_STATES, "r") as f:
         steady_states_data = json.load(f)
 
-    branches = build_branches(branches_data)
+    branches = build_branches(branches_data, len(steady_states_data))
     steady_states = build_steady_states(steady_states_data)
 
     combined = format_pb2.Solution()

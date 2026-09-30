@@ -43,6 +43,12 @@ jobs:
       - name: Validate the solution
         run: python solution/validate_solution.py | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - run: pip install --quiet protobuf
+      - name: Check solution.pb decodes back to the solution
+        run: |
+          python representations/protobuf/render.py
+          python representations/protobuf/decode.py
+
   publish:
     needs: verify
     # An allowlist rather than "not a pull request": a trigger added later has
