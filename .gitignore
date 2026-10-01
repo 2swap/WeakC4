@@ -1,6 +1,8 @@
 **/__pycache__/
 solver/
 union_weakc4/search/
+.devenv*
+solution/stuff/target
 
 # Rendered by CI (or locally) and published to Pages
 representations/webclient/graph.js
