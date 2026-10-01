@@ -10,7 +10,11 @@ use std::{collections::HashMap, fmt::Debug, fs};
 fn main() {
     let graph = Graph::load();
 
-    let t = graph.start();
+    let mut t = graph.start();
+
+    t.pprint();
+
+    t.play(Column::C1);
 
     t.pprint();
 }

@@ -136,8 +136,8 @@ impl Board {
                 print!(
                     "{}",
                     match self.state.entries[RowAndColumn { row: r, column: c }] {
-                        Some(Player::First) => "O",
-                        Some(Player::Second) => "X",
+                        Some(Player::First) => "X",
+                        Some(Player::Second) => "O",
                         None => "-",
                     }
                 );
@@ -233,17 +233,42 @@ pub struct Graph {
 #[derive(Debug, Clone)]
 pub struct GraphTraversal<'g> {
     graph: &'g Graph,
-    path: Vec<Column>,
+    board: Board,
+    node: Node,
     flip: bool,
 }
 
 impl<'g> GraphTraversal<'g> {
+    pub fn optimal_move(&self) -> Column {
+        match &self.node {
+            Node::Steady { ss_idx } => {
+                let ss = &self.graph.steady[*ss_idx];
+                todo!()
+            }
+            Node::Response(column, array_map) => *column,
+        }
+    }
+
     pub fn pprint(&self) {
-        let mut board = Board::from_path(self.path.clone());
+        let mut board = self.board.clone();
+        board = board.play(self.optimal_move()).unwrap();
         if self.flip {
             board = board.flip();
         }
         board.pprint();
+    }
+
+    pub fn play(&mut self, column: Column) {
+        match &self.node {
+            Node::Steady { ss_idx } => {
+                let ss = &self.graph.steady[*ss_idx];
+                todo!();
+            }
+            Node::Response(column, array_map) => {
+                println!("{:?}", column);
+                todo!();
+            }
+        }
     }
 }
 
@@ -251,8 +276,9 @@ impl Graph {
     pub fn start<'g>(&'g self) -> GraphTraversal<'g> {
         GraphTraversal {
             graph: self,
-            path: vec![],
-            flip: false,
+            board: Board::empty(),
+            node: self.nodes[self.root.node_idx].clone(),
+            flip: self.root.flip,
         }
     }
 }
@@ -272,7 +298,7 @@ impl Graph {
             }
         };
 
-        let branches_json_string = fs::read_to_string("../branches.json").unwrap();
+        let branches_json_string = fs::read_to_string("../solution/branches.json").unwrap();
         let branches_json: HashMap<String, Value> =
             serde_json::from_str(&branches_json_string).unwrap();
         #[derive(Debug)]
@@ -299,7 +325,8 @@ impl Graph {
             })
             .collect();
 
-        let steady_states_json_string = fs::read_to_string("../steady_states.json").unwrap();
+        let steady_states_json_string =
+            fs::read_to_string("../solution/steady_states.json").unwrap();
         let steady_states_json: Vec<Vec<String>> =
             serde_json::from_str(&steady_states_json_string).unwrap();
         fn ascii_digit_to_u8(c: char) -> Option<u8> {
