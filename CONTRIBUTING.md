@@ -1,9 +1,14 @@
 # Contributing steady-state diagrams
 
-Every steady-state diagram found at a non-leaf node makes the solution
-smaller, because that node's private subtree stops being needed. That is what a
-contribution is here, and it can be settled by machine: a diagram either beats
-every Yellow reply or it does not. CI runs that check for you.
+A verified steady-state diagram can reduce nodes, edges, or both. In a shared
+graph, its descendants may remain reachable through other parents, so a useful
+diagram can remove edges without removing any nodes. Several diagrams can also
+reduce nodes together even when none does so individually.
+
+Measure the complete contribution after pruning, and report its node and edge
+counts against the base revision. Individual diagrams do not each need to save
+a node. CI checks that the whole solution is valid: every diagram must beat
+every Yellow reply, including diagrams contributing only edge savings.
 
 ## The files you edit
 
