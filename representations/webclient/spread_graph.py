@@ -156,7 +156,7 @@ PIN_DEPTH = 50
 # Reflection across the x = 0 plane, which is what mirroring a board does to
 # its node's position.
 MIRROR = np.array([-1.0, 1.0, 1.0])
-
+FORCE_MIRRORING = True
 
 def repulsion_forces(pos, sources=None):
     """Runs between every pair of nodes. Returns the net force on each node in
