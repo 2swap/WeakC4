@@ -1,9 +1,14 @@
 # Contributing steady-state diagrams
 
-Every steady-state diagram found at a non-leaf node makes the solution
-smaller, because that node's private subtree stops being needed. That is what a
-contribution is here, and it can be settled by machine: a diagram either beats
-every Yellow reply or it does not. CI runs that check for you.
+A verified steady-state diagram can reduce nodes, edges, or both. In a shared
+graph, its descendants may remain reachable through other parents, so a useful
+diagram can remove edges without removing any nodes. Several diagrams can also
+reduce nodes together even when none does so individually.
+
+Measure the complete contribution after pruning, and report its node and edge
+counts against the base revision. Individual diagrams do not each need to save
+a node. CI checks that the whole solution is valid: every diagram must beat
+every Yellow reply, including diagrams contributing only edge savings.
 
 ## The files you edit
 
@@ -46,6 +51,11 @@ rows, top row first:
 - Exactly six rows of exactly seven characters, each a digit `0`-`9` giving
   that square's priority level in Red's policy, where `0` is the strongest
   level. There is no blank cell.
+
+To simplify a diagram, try replacing redundant labels with `9`, the weakest
+active priority. This can change the policy, so verify the result against
+every position that references the diagram. Cells beneath disks must remain
+`0`. Remove duplicate diagrams after simplification and update their indices.
 
 The two files interact. A node that gains a diagram has its string value
 replaced by the diagram's index. Anything that was only reachable through it
