@@ -52,6 +52,11 @@ rows, top row first:
   that square's priority level in Red's policy, where `0` is the strongest
   level. There is no blank cell.
 
+To simplify a diagram, try replacing redundant labels with `9`, the weakest
+active priority. This can change the policy, so verify the result against
+every position that references the diagram. Cells beneath disks must remain
+`0`. Remove duplicate diagrams after simplification and update their indices.
+
 The two files interact. A node that gains a diagram has its string value
 replaced by the diagram's index. Anything that was only reachable through it
 comes out, both its entries and any diagrams nothing else points at. The
