@@ -1,6 +1,6 @@
 use cantor::{ArrayMap, Finite};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::{collections::HashMap, fmt::Debug, fs};
 
@@ -45,6 +45,52 @@ pub struct RowAndColumn {
     pub column: Column,
 }
 
+fn winning_lines() -> Vec<[RowAndColumn; 4]> {
+    let mut lines = Vec::new();
+
+    // Horizontal
+    for row in Row::iter() {
+        for start in 0..4 {
+            lines.push(std::array::from_fn(|i| RowAndColumn {
+                row,
+                column: Column::iter().nth(start + i).unwrap(),
+            }));
+        }
+    }
+
+    // Vertical
+    for column in Column::iter() {
+        for start in 0..3 {
+            lines.push(std::array::from_fn(|i| RowAndColumn {
+                row: Row::iter().nth(start + i).unwrap(),
+                column,
+            }));
+        }
+    }
+
+    // Diagonal \
+    for start_row in 0..3 {
+        for start_column in 0..4 {
+            lines.push(std::array::from_fn(|i| RowAndColumn {
+                row: Row::iter().nth(start_row + i).unwrap(),
+                column: Column::iter().nth(start_column + i).unwrap(),
+            }));
+        }
+    }
+
+    // Diagonal /
+    for start_row in 0..3 {
+        for start_column in 3..7 {
+            lines.push(std::array::from_fn(|i| RowAndColumn {
+                row: Row::iter().nth(start_row + i).unwrap(),
+                column: Column::iter().nth(start_column - i).unwrap(),
+            }));
+        }
+    }
+
+    lines
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Player {
     First,
@@ -69,6 +115,12 @@ impl<T: Clone> LabelledBoard<T> {
     pub fn new(mut f: impl FnMut(Row, Column) -> T) -> Self {
         Self {
             entries: ArrayMap::new(|RowAndColumn { row, column }| f(row, column)),
+        }
+    }
+
+    pub fn map<S>(self, f: impl FnMut(&T) -> S) -> LabelledBoard<S> {
+        LabelledBoard {
+            entries: self.entries.map(f),
         }
     }
 
@@ -115,6 +167,72 @@ impl<T: Debug> Debug for LabelledBoard<T> {
     }
 }
 
+impl LabelledBoard<SteadyStateSymbol> {
+    fn select_column(&self, board: &Board, ss_uses: &mut Vec<Vec<RowAndColumn>>) -> Column {
+        debug_assert_eq!(board.turn(), Player::First);
+
+        // select a winning move if available
+        for column in Column::iter() {
+            if let Some(next_board) = board.clone().play(column) {
+                if next_board.has_four_in_a_row(Player::First) {
+                    return column;
+                }
+            }
+        }
+
+        // select a column blocking an opponent win, if available
+        for column in Column::iter() {
+            if let Some(next_board) = board.clone().skip_turn().play(column) {
+                if next_board.has_four_in_a_row(Player::Second) {
+                    return column;
+                }
+            }
+        }
+
+        // if no winning move or block is available, select the column with the smallest number which occurs exactly once on top
+        let filled = board.clone().state.map(|x| x.is_some());
+
+        let tops: ArrayMap<Column, Option<Row>> = ArrayMap::new(|column| {
+            for row in Row::iter() {
+                if !filled.entries[RowAndColumn { row, column }] {
+                    return Some(row);
+                }
+            }
+            None
+        });
+
+        let top_state_symbols = Column::iter()
+            .filter_map(|column| {
+                if let Some(row) = tops[column] {
+                    Some(RowAndColumn { row, column })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        ss_uses.push(top_state_symbols.clone());
+
+        for pt in &top_state_symbols {
+            if self.entries[*pt] == SteadyStateSymbol::Blank {
+                panic!();
+            }
+        }
+        for ss_sym in 0u8..16 {
+            let mut columns = vec![];
+            for pt in &top_state_symbols {
+                if self.entries[*pt] == SteadyStateSymbol::Value(ss_sym) {
+                    columns.push(pt.column);
+                }
+            }
+            if columns.len() == 1 {
+                return columns.pop().unwrap();
+            }
+        }
+
+        panic!()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Board {
     state: LabelledBoard<Option<Player>>,
@@ -123,7 +241,7 @@ pub struct Board {
 
 impl Board {
     pub fn pprint(&self) {
-        for (ri, r) in Row::iter()
+        for (_ri, r) in Row::iter()
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
@@ -159,6 +277,18 @@ impl Board {
         self.turn
     }
 
+    pub fn has_four_in_a_row(&self, player: Player) -> bool {
+        winning_lines().into_iter().any(|line| {
+            line.into_iter()
+                .all(|position| self.state.entries[position] == Some(player))
+        })
+    }
+
+    pub fn skip_turn(mut self) -> Self {
+        self.turn = self.turn.flip();
+        self
+    }
+
     pub fn play(mut self, column: Column) -> Option<Self> {
         for row in Row::iter() {
             let entry = &mut self.state.entries[RowAndColumn { row, column }];
@@ -188,99 +318,48 @@ impl Board {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SteadyStateSymbol {
     Blank,
     Value(u8),
 }
 
-#[derive(Debug, Clone)]
-pub struct Edge {
-    pub flip: bool,
-    pub node_idx: usize,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NodePtr {
+    flip: bool,
+    idx: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Response {
+    Steady { flip: bool, ss_idx: usize },
+    Lookup { column: Column, node: NodePtr },
 }
 
 #[derive(Clone)]
-pub enum Node {
-    Steady { ss_idx: usize },
-    Response(Column, ArrayMap<Column, Option<Edge>>),
+pub struct Node {
+    responses: ArrayMap<Column, Option<Response>>,
 }
 
 impl std::fmt::Debug for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Steady { ss_idx } => f.debug_struct("Steady").field("ss_idx", ss_idx).finish(),
-            Self::Response(arg0, arg1) => f
-                .debug_tuple("Response")
-                .field(arg0)
-                .field(
-                    &Column::iter()
-                        .map(|c| (c, &arg1[c]))
-                        .collect::<HashMap<_, _>>(),
-                )
-                .finish(),
-        }
+        f.debug_struct("NodeTwo")
+            .field(
+                "responses",
+                &Column::iter()
+                    .map(|c| (c, &self.responses[c]))
+                    .collect::<HashMap<_, _>>(),
+            )
+            .finish()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Graph {
-    root: Edge,
+    first_move: Column,
+    first_node: NodePtr,
     nodes: Vec<Node>,
     steady: Vec<LabelledBoard<SteadyStateSymbol>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct GraphTraversal<'g> {
-    graph: &'g Graph,
-    board: Board,
-    node: Node,
-    flip: bool,
-}
-
-impl<'g> GraphTraversal<'g> {
-    pub fn optimal_move(&self) -> Column {
-        match &self.node {
-            Node::Steady { ss_idx } => {
-                let ss = &self.graph.steady[*ss_idx];
-                todo!()
-            }
-            Node::Response(column, array_map) => *column,
-        }
-    }
-
-    pub fn pprint(&self) {
-        let mut board = self.board.clone();
-        board = board.play(self.optimal_move()).unwrap();
-        if self.flip {
-            board = board.flip();
-        }
-        board.pprint();
-    }
-
-    pub fn play(&mut self, column: Column) {
-        match &self.node {
-            Node::Steady { ss_idx } => {
-                let ss = &self.graph.steady[*ss_idx];
-                todo!();
-            }
-            Node::Response(column, array_map) => {
-                println!("{:?}", column);
-                todo!();
-            }
-        }
-    }
-}
-
-impl Graph {
-    pub fn start<'g>(&'g self) -> GraphTraversal<'g> {
-        GraphTraversal {
-            graph: self,
-            board: Board::empty(),
-            node: self.nodes[self.root.node_idx].clone(),
-            flip: self.root.flip,
-        }
-    }
 }
 
 impl Graph {
@@ -301,7 +380,7 @@ impl Graph {
         let branches_json_string = fs::read_to_string("../solution/branches.json").unwrap();
         let branches_json: HashMap<String, Value> =
             serde_json::from_str(&branches_json_string).unwrap();
-        #[derive(Debug)]
+        #[derive(Debug, Clone, Copy)]
         enum BranchesEdge {
             SteadyState { idx: usize },
             Move(Column),
@@ -360,89 +439,241 @@ impl Graph {
         }
 
         impl Loader {
-            fn node(&mut self, board: Board) -> Edge {
-                debug_assert_eq!(board.turn(), Player::First);
+            fn node(&mut self, board: Board) -> NodePtr {
+                debug_assert_eq!(board.turn(), Player::Second);
 
                 for (idx, (existing_board, _)) in self.nodes.iter().enumerate() {
                     if &board == existing_board {
-                        return Edge {
-                            flip: false,
-                            node_idx: idx,
-                        };
+                        return NodePtr { flip: false, idx };
                     }
                 }
                 for (idx, (existing_board, _)) in self.nodes.iter().enumerate() {
                     if board == existing_board.flip() {
-                        return Edge {
-                            flip: true,
-                            node_idx: idx,
-                        };
+                        return NodePtr { flip: true, idx };
                     }
                 }
 
-                let (flip, node) = if let Some((flip, branch_edge)) =
-                    if let Some(branch_edge) = self.branches.get(&board) {
-                        Some((false, branch_edge))
-                    } else if let Some(branch_edge) = self.branches.get(&board.flip()) {
-                        Some((true, branch_edge))
-                    } else {
-                        None
-                    } {
-                    match branch_edge {
-                        BranchesEdge::SteadyState { idx } => (flip, Node::Steady { ss_idx: *idx }),
-                        BranchesEdge::Move(column) => {
-                            let column = *column;
-                            (
-                                false,
-                                Node::Response(
-                                    column,
-                                    ArrayMap::new(|response| {
-                                        if let Some(next_board) =
-                                            board.clone().play(column).unwrap().play(response)
-                                        {
-                                            Some(self.node(next_board))
-                                        } else {
-                                            None
-                                        }
-                                    }),
-                                ),
-                            )
-                        }
-                    }
-                } else {
-                    (false, Node::Steady { ss_idx: 0 })
+                let node = Node {
+                    responses: ArrayMap::new(|column| {
+                        board.clone().play(column).map(|next_board| {
+                            let (branch_edge, flip) = self
+                                .branches
+                                .get(&next_board)
+                                .map(|branch_edge| (*branch_edge, false))
+                                .unwrap_or_else(|| {
+                                    self.branches
+                                        .get(&next_board.flip())
+                                        .map(|branches_edge| (*branches_edge, true))
+                                        .unwrap_or_else(|| {
+                                            (BranchesEdge::SteadyState { idx: 0 }, false)
+                                        })
+                                });
+
+                            match branch_edge {
+                                BranchesEdge::SteadyState { idx: ss_idx } => {
+                                    Response::Steady { flip, ss_idx }
+                                }
+                                BranchesEdge::Move(mut column) => {
+                                    if flip {
+                                        column = column.flip();
+                                    }
+                                    let node = self.node(next_board.play(column).unwrap());
+                                    Response::Lookup { column, node }
+                                }
+                            }
+                        })
+                    }),
                 };
-
-                // deduplicate nodes pointing at the same steady state
-                for (idx, (_, existing_node)) in self.nodes.iter().enumerate() {
-                    if let Node::Steady { ss_idx: a } = node
-                        && let Node::Steady { ss_idx: b } = existing_node
-                        && a == *b
-                    {
-                        return Edge {
-                            flip,
-                            node_idx: idx,
-                        };
-                    }
-                }
 
                 let node_idx = self.nodes.len();
                 self.nodes.push((board, node));
-                Edge { flip, node_idx }
+                NodePtr {
+                    flip: false,
+                    idx: node_idx,
+                }
+            }
+
+            fn graph(mut self) -> Graph {
+                let board = Board::empty();
+
+                let first_move = match self.branches.get(&board) {
+                    Some(BranchesEdge::Move(first_move)) => *first_move,
+                    _ => panic!(),
+                };
+
+                let board = board.play(first_move).unwrap();
+
+                let first_node = self.node(board);
+
+                Graph {
+                    first_move,
+                    first_node,
+                    nodes: self.nodes.into_iter().map(|(_, node)| node).collect(),
+                    steady: self.steady_states,
+                }
             }
         }
 
-        let mut loader = Loader {
+        let graph = Loader {
             branches,
             steady_states,
             nodes: vec![],
-        };
+        }
+        .graph();
 
-        let root = loader.node(Board::from_path(vec![]));
-        Graph {
-            root,
-            nodes: loader.nodes.into_iter().map(|(_, node)| node).collect(),
-            steady: loader.steady_states,
+        println!("Loaded graph");
+        println!("Node count = {:?}", graph.nodes.len());
+        println!("Steady state count = {:?}", graph.steady.len());
+
+        graph
+    }
+
+    fn check_at_steady(
+        &self,
+        board: Board,
+        steady: &LabelledBoard<SteadyStateSymbol>,
+        done: &mut BTreeSet<(Board, LabelledBoard<SteadyStateSymbol>)>,
+        ss_uses: &mut Vec<Vec<RowAndColumn>>,
+    ) {
+        debug_assert_eq!(board.turn(), Player::First);
+
+        if done.contains(&(board.clone(), steady.clone())) {
+            return;
+        }
+        done.insert((board.clone(), steady.clone()));
+
+        assert!(!board.has_four_in_a_row(Player::First));
+        assert!(!board.has_four_in_a_row(Player::Second));
+
+        let column = steady.select_column(&board, ss_uses);
+        let next_board = board.play(column).unwrap();
+
+        if next_board.has_four_in_a_row(Player::First) {
+            return; // player 1 wins
+        }
+
+        for column in Column::iter() {
+            if let Some(next_next_board) = next_board.clone().play(column) {
+                self.check_at_steady(next_next_board, steady, done, ss_uses);
+            }
         }
     }
+
+    fn check_at(
+        &self,
+        mut board: Board,
+        node_ptr: &NodePtr,
+        done: &mut BTreeSet<(Board, NodePtr)>,
+        ss_uses: &mut Vec<SteadyStateUses>,
+    ) {
+        debug_assert_eq!(board.turn(), Player::Second);
+
+        if done.contains(&(board.clone(), *node_ptr)) {
+            return;
+        }
+        done.insert((board.clone(), node_ptr.clone()));
+
+        println!("Checked {:?} nodes", done.len());
+
+        if node_ptr.flip {
+            board = board.flip();
+        }
+
+        assert!(!board.has_four_in_a_row(Player::First));
+        assert!(!board.has_four_in_a_row(Player::Second));
+
+        let node = &self.nodes[node_ptr.idx];
+        for column in Column::iter() {
+            if let Some(next_board) = board.clone().play(column) {
+                assert_eq!(next_board.has_four_in_a_row(Player::Second), false);
+                let response = *node.responses[column].as_ref().unwrap();
+                match response {
+                    Response::Steady { flip, ss_idx } => {
+                        let next_board = if !flip { next_board } else { next_board.flip() };
+                        let steady = self.steady[ss_idx].clone();
+                        let mut ss_uses_here = vec![];
+                        self.check_at_steady(
+                            next_board,
+                            &steady,
+                            &mut BTreeSet::new(),
+                            &mut ss_uses_here,
+                        );
+                        for ss_use_here in ss_uses_here {
+                            ss_uses.push(SteadyStateUses {
+                                ss_idx,
+                                points: ss_use_here,
+                            });
+                        }
+                    }
+                    Response::Lookup {
+                        column,
+                        node: next_node_ptr,
+                    } => {
+                        let next_next_board = next_board.play(column).unwrap();
+                        self.check_at(next_next_board, &next_node_ptr, done, ss_uses);
+                    }
+                }
+            } else {
+                assert!(node.responses[column].is_none());
+            }
+        }
+    }
+
+    pub fn check(&self) -> Vec<SteadyStateUses> {
+        let mut ss_uses = vec![];
+        self.check_at(
+            Board::empty().play(self.first_move).unwrap(),
+            &self.first_node,
+            &mut BTreeSet::new(),
+            &mut ss_uses,
+        );
+        println!("Checks passed :D");
+        ss_uses
+    }
+
+    pub fn populate_steady_state_blanks(&mut self, ss_uses: Vec<SteadyStateUses>) {
+        let mut usages = (0..self.steady.len())
+            .map(|_| LabelledBoard::new(|_, _| false))
+            .collect::<Vec<_>>();
+        for SteadyStateUses { ss_idx, points } in ss_uses {
+            for p in points {
+                usages[ss_idx].entries[p] = true;
+            }
+        }
+        for (ss_idx, usage) in usages.iter().enumerate() {
+            for p in RowAndColumn::iter() {
+                if !usage.entries[p] {
+                    self.steady[ss_idx].entries[p] = SteadyStateSymbol::Blank;
+                }
+            }
+        }
+    }
+
+    pub fn reduce_steady_state_values(&mut self) {
+        for steady in &mut self.steady {
+            let mut used_values = BTreeSet::new();
+            for p in RowAndColumn::iter() {
+                if let SteadyStateSymbol::Value(x) = steady.entries[p] {
+                    used_values.insert(x);
+                }
+            }
+            // these are sorted since we used a BTreeSet
+            let used_values = used_values.into_iter().collect::<Vec<_>>();
+            let value_map = used_values
+                .iter()
+                .enumerate()
+                .map(|(i, x)| (*x, i as u8))
+                .collect::<HashMap<_, _>>();
+            *steady = steady.clone().map(|x| match x {
+                SteadyStateSymbol::Blank => SteadyStateSymbol::Blank,
+                SteadyStateSymbol::Value(x) => SteadyStateSymbol::Value(*value_map.get(x).unwrap()),
+            });
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SteadyStateUses {
+    ss_idx: usize,
+    points: Vec<RowAndColumn>,
 }

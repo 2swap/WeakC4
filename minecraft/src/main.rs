@@ -1,20 +1,22 @@
-mod dtypes;
+pub mod dtypes;
 
-use cantor::{ArrayMap, Finite};
-use dtypes::*;
-use serde_json::Value;
-use std::collections::BTreeMap;
-use std::fmt::Write;
-use std::{collections::HashMap, fmt::Debug, fs};
+use crate::dtypes::Graph;
 
 fn main() {
-    let graph = Graph::load();
+    let mut graph = Graph::load();
+    let ss_uses = graph.check();
+    graph.populate_steady_state_blanks(ss_uses);
+    graph.reduce_steady_state_values();
+    graph.check();
+    println!("Done");
 
-    let mut t = graph.start();
+    // println!("{:?}", graph);
 
-    t.pprint();
+    // let mut t = graph.start();
 
-    t.play(Column::C1);
+    // t.pprint();
 
-    t.pprint();
+    // t.play(Column::C1);
+
+    // t.pprint();
 }
