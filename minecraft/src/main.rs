@@ -745,8 +745,8 @@ impl Graph {
         }
     }
 
-    pub fn dedup_steady_states(&mut self) -> HashMap<usize, usize> {
-        let mut steady_state_reindexing = (0..self.steady.len()).map(|i| (i, i)).collect();
+    pub fn dedup_steady_states(&mut self) -> HashMap<usize, (usize, bool)> {
+        let mut steady_state_reindexing = (0..self.steady.len()).map(|i| (i, (i, false))).collect();
 
         'LOOP: loop {
             let n = self.steady.len();
@@ -923,7 +923,8 @@ impl Graph {
     // if `flip_b` is set then any existing references to steady state `b` shall be flipped
     fn reroute_steady_state_idx(
         &mut self,
-        steady_state_reindexing: &mut HashMap<usize, usize>,
+        // where each old steady state should point to and whether it gets flipped
+        steady_state_reindexing: &mut HashMap<usize, (usize, bool)>,
         ss_idx_a: usize,
         ss_idx_b: usize,
         flip_b: bool,
@@ -944,16 +945,20 @@ impl Graph {
             }
         };
 
+        let map_ss_flip = |flip: bool, ss_idx: usize| {
+            if ss_idx == ss_idx_b && flip_b {
+                !flip
+            } else {
+                flip
+            }
+        };
+
         self.steady.remove(ss_idx_a);
         for node in &mut self.nodes {
             node.responses = node.responses.map(|responses| {
                 responses.map(|response| match response {
                     Response::Steady { flip, ss_idx } => Response::Steady {
-                        flip: if ss_idx == ss_idx_b && flip_b {
-                            !flip
-                        } else {
-                            flip
-                        },
+                        flip: map_ss_flip(flip, ss_idx),
                         ss_idx: map_ss_idx(ss_idx),
                     },
                     Response::Lookup { column, node } => Response::Lookup { column, node },
@@ -963,10 +968,10 @@ impl Graph {
 
         *steady_state_reindexing = steady_state_reindexing
             .into_iter()
-            .map(|(x, y)| (*x, map_ss_idx(*y)))
+            .map(|(x, (y, flip))| (*x, (map_ss_idx(*y), map_ss_flip(*flip, *y))))
             .collect();
 
-        for (_, y) in steady_state_reindexing {
+        for (_, (y, _)) in steady_state_reindexing {
             assert!(*y < self.steady.len());
         }
     }
