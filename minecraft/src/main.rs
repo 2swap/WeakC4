@@ -990,11 +990,11 @@ fn main() {
     graph.populate_steady_state_blanks(ss_uses);
     graph.reduce_steady_state_values();
     let steady_state_reindexing = graph.dedup_steady_states();
-    println!("steady_state_reindexing = {:?}", steady_state_reindexing);
     graph.check();
     graph.print_stats();
     println!("Done");
 
-    graph.print_steady_states();
-    println!("{:?}", steady_state_reindexing);
+    // use these to update branches.json and steady_states.json
+    // graph.print_steady_states();
+    // println!("{:?}", steady_state_reindexing);
 }
