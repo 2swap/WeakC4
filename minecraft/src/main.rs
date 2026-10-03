@@ -586,7 +586,7 @@ impl Graph {
                 if ri != 0 {
                     print!(", ");
                 }
-                print!("[\"");
+                print!("\"");
                 for column in Column::iter() {
                     let p = RowAndColumn { row, column };
                     match ss.entries[p] {
@@ -594,7 +594,7 @@ impl Graph {
                         SteadyStateSymbol::Value(x) => print!("{x}"),
                     }
                 }
-                print!("\"]");
+                print!("\"");
             }
             print!("]");
         }
