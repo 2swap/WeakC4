@@ -57,6 +57,13 @@ active priority. This can change the policy, so verify the result against
 every position that references the diagram. Cells beneath disks must remain
 `0`. Remove duplicate diagrams after simplification and update their indices.
 
+Furthermore, you can optimize for ease of memorization by maximizing strict
+follow-ups (if yellow plays, red plays above always, and never plays at the
+section below), letting `0` be reserved only for follow-ups and cells beneath
+disks in any position that references the diagram. Tiebreak by minimum
+distinct number labels used, and have numbers being as low as possible (e.g.
+prefer 112 > 122 > 123).
+
 The two files interact. A node that gains a diagram has its string value
 replaced by the diagram's index. Anything that was only reachable through it
 comes out, both its entries and any diagrams nothing else points at. The
