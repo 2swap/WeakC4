@@ -168,7 +168,7 @@ def render_js(dataset):
 
 
 def place_nodes(nodes):
-    """Give every node its x, y from a fresh force-directed layout."""
+    """Give every node its x, y, z from a fresh force-directed layout."""
     edges = [
         (name, neighbor)
         for name, node in nodes.items()
@@ -181,8 +181,8 @@ def place_nodes(nodes):
         twin = by_board.get(mirror_key(solution.board_key(name)))
         if twin is not None:
             mirrors[name] = twin
-    for name, (x, y) in spread_graph.layout(list(nodes), edges, mirrors).items():
-        nodes[name].update(x=x, y=y)
+    for name, (x, y, z) in spread_graph.layout(list(nodes), edges, mirrors).items():
+        nodes[name].update(x=x, y=y, z=z)
 
 
 def count(nodes):
