@@ -171,7 +171,8 @@ def _walk_forced(position, red_lookup, is_leaf):
     reply, if any, from where this is called) until either the line ends or
     Yellow faces a real decision.
 
-    Returns ('end', sequence) once Red wins or a steady state is reached, or
+    Returns ('end', sequence) once a steady state is reached, ('win', sequence)
+    if Yellow's last move let Red connect four immediately, or
     ('yellow', (position, key)) at the next point Yellow has to choose a
     column.
 
@@ -194,7 +195,7 @@ def _walk_forced(position, red_lookup, is_leaf):
                 continue
             board = solution.board_from_position(position)
             win_col = next(c for c in range(solution.COLS) if solution._red_wins_now(board, c))
-            return 'end', position + str(win_col + 1)
+            return 'win', position + str(win_col + 1)
         return 'yellow', (position, key)
 
 def _build_practice_sequences(red_lookup, is_leaf, rng):
@@ -204,7 +205,10 @@ def _build_practice_sequences(red_lookup, is_leaf, rng):
     expanded elsewhere - a transposition - doesn't need expanding again, since
     its own replies are already covered by that earlier expansion; the line
     through it simply ends there (right after Red's own last move, itself a
-    natural stopping point)."""
+    natural stopping point).
+
+    Lines where Yellow simply blunders into an immediate Red connection are
+    dropped: punishing them takes no knowledge of the solution."""
     fully_expanded = set()
     sequences = []
 
@@ -215,6 +219,8 @@ def _build_practice_sequences(red_lookup, is_leaf, rng):
         rng.shuffle(cols)
         for col in cols:
             kind, val = _walk_forced(position + str(col + 1), red_lookup, is_leaf)
+            if kind == 'win':
+                continue
             if kind == 'end':
                 sequences.append(val)
             else:
