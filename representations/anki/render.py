@@ -8,7 +8,8 @@ import requests
 import sys
 from pathlib import Path
 
-SOLUTION_DIR = Path(__file__).resolve().parent.parent.parent / "solution"
+HERE = Path(__file__).resolve().parent
+SOLUTION_DIR = HERE.parent.parent / "solution"
 BRANCHES = SOLUTION_DIR / "branches.json"
 STEADY_STATES = SOLUTION_DIR / "steady_states.json"
 
@@ -18,6 +19,25 @@ import validate_solution as solution  # noqa: E402
 deck_name = "2swap's Connect 4"
 branch_model_name = deck_name
 steady_model_name = deck_name + " Steady State"
+
+# Note types the deck's cards use, built from the templates in this directory.
+# The template is named "Card 1" to match the note types in the published deck,
+# so updating an imported copy replaces its templates in place.
+note_types = [
+    {
+        "name": branch_model_name,
+        "fields": ["Setup", "Move"],
+        "front": "Connect4_front.html",
+        "back": "Connect4_back.html",
+    },
+    {
+        "name": steady_model_name,
+        "fields": ["Diagram"],
+        "front": "Connect4Steady_front.html",
+        "back": "Connect4Steady_back.html",
+    },
+]
+card_css = HERE / "Connect4.css"
 
 def anki_connect(action, params={}):
     try:
@@ -34,6 +54,35 @@ def anki_connect(action, params={}):
 
 def create_anki_deck(deck):
     anki_connect("createDeck", { "deck": deck } )
+
+def build_note_types():
+    print("Building note types...")
+    existing = anki_connect("modelNames")["result"]
+    css = card_css.read_text()
+    for note_type in note_types:
+        template = {
+            "Front": (HERE / note_type["front"]).read_text(),
+            "Back": (HERE / note_type["back"]).read_text(),
+        }
+        if note_type["name"] in existing:
+            anki_connect("updateModelTemplates", { "model": {
+                "name": note_type["name"],
+                "templates": { "Card 1": template },
+            } } )
+            anki_connect("updateModelStyling", { "model": {
+                "name": note_type["name"],
+                "css": css,
+            } } )
+            print(f"Updated note type {note_type['name']}.")
+        else:
+            anki_connect("createModel", {
+                "modelName": note_type["name"],
+                "inOrderFields": note_type["fields"],
+                "css": css,
+                "isCloze": False,
+                "cardTemplates": [dict(Name="Card 1", **template)],
+            } )
+            print(f"Created note type {note_type['name']}.")
 
 def build_branches():
     print("Building branch cards...")
@@ -122,7 +171,8 @@ def _walk_forced(position, red_lookup, is_leaf):
     reply, if any, from where this is called) until either the line ends or
     Yellow faces a real decision.
 
-    Returns ('end', sequence) once Red wins or a steady state is reached, or
+    Returns ('end', sequence) once a steady state is reached, ('win', sequence)
+    if Yellow's last move let Red connect four immediately, or
     ('yellow', (position, key)) at the next point Yellow has to choose a
     column.
 
@@ -145,7 +195,7 @@ def _walk_forced(position, red_lookup, is_leaf):
                 continue
             board = solution.board_from_position(position)
             win_col = next(c for c in range(solution.COLS) if solution._red_wins_now(board, c))
-            return 'end', position + str(win_col + 1)
+            return 'win', position + str(win_col + 1)
         return 'yellow', (position, key)
 
 def _build_practice_sequences(red_lookup, is_leaf, rng):
@@ -155,7 +205,10 @@ def _build_practice_sequences(red_lookup, is_leaf, rng):
     expanded elsewhere - a transposition - doesn't need expanding again, since
     its own replies are already covered by that earlier expansion; the line
     through it simply ends there (right after Red's own last move, itself a
-    natural stopping point)."""
+    natural stopping point).
+
+    Lines where Yellow simply blunders into an immediate Red connection are
+    dropped: punishing them takes no knowledge of the solution."""
     fully_expanded = set()
     sequences = []
 
@@ -166,6 +219,8 @@ def _build_practice_sequences(red_lookup, is_leaf, rng):
         rng.shuffle(cols)
         for col in cols:
             kind, val = _walk_forced(position + str(col + 1), red_lookup, is_leaf)
+            if kind == 'win':
+                continue
             if kind == 'end':
                 sequences.append(val)
             else:
@@ -210,7 +265,7 @@ def build_practice():
 def build_instructions():
     print("Building instructions...")
     create_anki_deck(deck_name + "::0. Instructions")
-    html = Path("InstructionCard.html").read_text()
+    html = (HERE / "InstructionCard.html").read_text()
     notes = [{
         "deckName": deck_name + "::0. Instructions",
         "modelName": "Basic",
@@ -225,6 +280,7 @@ def build_instructions():
     anki_connect("addNotes", { "notes": notes } )
     print("Added instructions card to Anki.")
 
+build_note_types()
 build_instructions()
 build_branches()
 build_practice()
