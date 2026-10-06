@@ -1,7 +1,7 @@
 **/__pycache__/
 .devenv*
-minecraft/target
 
 # Rendered by CI (or locally) and published to Pages
 representations/webclient/graph.js
 representations/protobuf/solution.pb
+representations/minecraft/target

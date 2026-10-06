@@ -38,6 +38,18 @@ impl Column {
             Self::C7 => Self::C1,
         }
     }
+
+    pub fn to_digit(&self) -> char {
+        match self {
+            Column::C1 => '1',
+            Column::C2 => '2',
+            Column::C3 => '3',
+            Column::C4 => '4',
+            Column::C5 => '5',
+            Column::C6 => '6',
+            Column::C7 => '7',
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Finite)]
@@ -352,12 +364,15 @@ impl Board {
         }
     }
 
-    pub fn from_path(mut columns: Vec<Column>) -> Self {
+    pub fn from_path(mut columns: Vec<Column>) -> Option<Self> {
         if let Some(last) = columns.pop() {
-            let board = Self::from_path(columns);
-            board.play(last).unwrap()
+            if let Some(board) = Self::from_path(columns) {
+                board.play(last)
+            } else {
+                None
+            }
         } else {
-            Self::empty()
+            Some(Self::empty())
         }
     }
 }
@@ -376,6 +391,7 @@ pub struct NodePtr {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Response {
+    ObviousSteady, // a winning move
     Steady { flip: bool, ss_idx: usize },
     Lookup { column: Column, node: NodePtr },
 }
@@ -421,12 +437,13 @@ impl Graph {
             }
         };
 
-        let branches_json_string = fs::read_to_string("../solution/branches.json").unwrap();
+        let branches_json_string = fs::read_to_string("../../solution/branches.json").unwrap();
         let branches_json: HashMap<String, Value> =
             serde_json::from_str(&branches_json_string).unwrap();
         #[derive(Debug, Clone, Copy)]
         enum BranchesEdge {
             SteadyState { idx: usize },
+            ObviousSteadyState,
             Move(Column),
         }
         let branches: BTreeMap<Board, BranchesEdge> = branches_json
@@ -434,7 +451,7 @@ impl Graph {
             .map(|(path, edge)| {
                 let path = path.chars().map(char_to_column).collect();
                 (
-                    Board::from_path(path),
+                    Board::from_path(path).unwrap(),
                     if let Some(idx) = edge.as_u64() {
                         BranchesEdge::SteadyState { idx: idx as usize }
                     } else if let Some(c) = edge.as_str() {
@@ -449,7 +466,7 @@ impl Graph {
             .collect();
 
         let steady_states_json_string =
-            fs::read_to_string("../solution/steady_states.json").unwrap();
+            fs::read_to_string("../../solution/steady_states.json").unwrap();
         let steady_states_json: Vec<Vec<String>> =
             serde_json::from_str(&steady_states_json_string).unwrap();
         fn ascii_digit_to_u8(c: char) -> Option<u8> {
@@ -509,11 +526,12 @@ impl Graph {
                                         .get(&next_board.flip())
                                         .map(|branches_edge| (*branches_edge, true))
                                         .unwrap_or_else(|| {
-                                            (BranchesEdge::SteadyState { idx: 0 }, false)
+                                            (BranchesEdge::ObviousSteadyState, false)
                                         })
                                 });
 
                             match branch_edge {
+                                BranchesEdge::ObviousSteadyState => Response::ObviousSteady,
                                 BranchesEdge::SteadyState { idx: ss_idx } => {
                                     Response::Steady { flip, ss_idx }
                                 }
@@ -568,37 +586,6 @@ impl Graph {
         println!("Loaded graph");
 
         graph
-    }
-
-    fn print_steady_states(&self) {
-        print!("[");
-        for (idx, ss) in self.steady.iter().enumerate() {
-            if idx != 0 {
-                print!(", ");
-            }
-            print!("[");
-            for (ri, row) in Row::iter()
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .enumerate()
-            {
-                if ri != 0 {
-                    print!(", ");
-                }
-                print!("\"");
-                for column in Column::iter() {
-                    let p = RowAndColumn { row, column };
-                    match ss.entries[p] {
-                        SteadyStateSymbol::Blank => print!("9"),
-                        SteadyStateSymbol::Value(x) => print!("{x}"),
-                    }
-                }
-                print!("\"");
-            }
-            print!("]");
-        }
-        println!("]");
     }
 
     fn print_stats(&self) {
@@ -666,6 +653,16 @@ impl Graph {
                 assert_eq!(next_board.has_four_in_a_row(Player::Second), false);
                 let response = *node.responses[column].as_ref().unwrap();
                 match response {
+                    Response::ObviousSteady => {
+                        let steady = LabelledBoard::new(|_row, _column| SteadyStateSymbol::Blank);
+                        let mut ss_uses_here = vec![];
+                        self.check_at_steady(
+                            next_board,
+                            &steady,
+                            &mut BTreeSet::new(),
+                            &mut ss_uses_here,
+                        );
+                    }
                     Response::Steady { flip, ss_idx } => {
                         let next_board = if !flip { next_board } else { next_board.flip() };
                         let steady = self.steady[ss_idx].clone();
@@ -957,6 +954,7 @@ impl Graph {
         for node in &mut self.nodes {
             node.responses = node.responses.map(|responses| {
                 responses.map(|response| match response {
+                    Response::ObviousSteady => Response::ObviousSteady,
                     Response::Steady { flip, ss_idx } => Response::Steady {
                         flip: map_ss_flip(flip, ss_idx),
                         ss_idx: map_ss_idx(ss_idx),
@@ -975,6 +973,160 @@ impl Graph {
             assert!(*y < self.steady.len());
         }
     }
+
+    pub fn to_json(&self) -> (String, String) {
+        #[derive(Debug)]
+        enum BranchNext {
+            Column(Column),
+            Steady(usize),
+        }
+
+        #[derive(Debug)]
+        struct Branch {
+            path: Vec<Column>,
+            next: BranchNext,
+        }
+
+        fn populate_branches(
+            graph: &Graph,
+            branches: &mut Vec<Branch>,
+            node_idx: usize,
+            path: Vec<Column>,
+        ) {
+            let node = &graph.nodes[node_idx];
+            'LOOP: for their_column in Column::iter() {
+                let mut next_path = path.clone();
+                next_path.push(their_column);
+
+                // only store each node once
+                if let Some(next_board) = Board::from_path(next_path.clone()) {
+                    for branch in branches.iter() {
+                        let branch_board = Board::from_path(branch.path.clone()).unwrap();
+                        if next_board == branch_board || next_board == branch_board.flip() {
+                            continue 'LOOP;
+                        }
+                    }
+
+                    match node.responses[their_column] {
+                        None => {}
+                        Some(Response::ObviousSteady) => {}
+                        Some(Response::Steady { flip, ss_idx }) => {
+                            if !flip {
+                                branches.push(Branch {
+                                    path: next_path.clone(),
+                                    next: BranchNext::Steady(ss_idx),
+                                });
+                            } else {
+                                let next_path_flipped =
+                                    next_path.iter().map(|c| c.flip()).collect::<Vec<_>>();
+                                branches.push(Branch {
+                                    path: next_path_flipped,
+                                    next: BranchNext::Steady(ss_idx),
+                                });
+                            }
+                        }
+                        Some(Response::Lookup {
+                            column: resp_column,
+                            node: resp_node_ptr,
+                        }) => {
+                            branches.push(Branch {
+                                path: next_path.clone(),
+                                next: BranchNext::Column(resp_column),
+                            });
+
+                            let mut next_next_path = next_path.clone();
+                            next_next_path.push(resp_column);
+
+                            if resp_node_ptr.flip {
+                                next_next_path =
+                                    next_next_path.into_iter().map(|c| c.flip()).collect();
+                            }
+
+                            populate_branches(
+                                graph,
+                                branches,
+                                resp_node_ptr.idx,
+                                next_next_path.clone(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut branches: Vec<Branch> = vec![Branch {
+            path: vec![],
+            next: BranchNext::Column(Column::C4),
+        }];
+        populate_branches(self, &mut branches, self.first_node.idx, vec![Column::C4]);
+
+        let mut branches_json = String::new();
+        let mut steady_states_json = String::new();
+
+        write!(&mut branches_json, "{{\n").unwrap();
+        for (branch_idx, branch) in branches.iter().enumerate() {
+            let mut path_json = String::new();
+            for column in &branch.path {
+                write!(&mut path_json, "{}", column.to_digit()).unwrap();
+            }
+            let next_json = match branch.next {
+                BranchNext::Column(column) => format!("\"{}\"", column.to_digit()),
+                BranchNext::Steady(ss_idx) => format!("{ss_idx}"),
+            };
+            write!(
+                &mut branches_json,
+                "  \"{}\": {}{}\n",
+                path_json,
+                next_json,
+                if branch_idx + 1 < branches.len() {
+                    ","
+                } else {
+                    ""
+                }
+            )
+            .unwrap();
+        }
+        write!(&mut branches_json, "}}\n").unwrap();
+
+        write!(&mut steady_states_json, "[\n").unwrap();
+        for (idx, steady) in self.steady.iter().enumerate() {
+            write!(&mut steady_states_json, "  [\n").unwrap();
+            for (row_idx, row) in Row::iter()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .enumerate()
+            {
+                let mut columns_json = String::new();
+                for column in Column::iter() {
+                    write!(
+                        &mut columns_json,
+                        "{}",
+                        match steady.entries[RowAndColumn { row, column }] {
+                            SteadyStateSymbol::Blank => "9".to_string(),
+                            SteadyStateSymbol::Value(sym) => format!("{sym}"),
+                        }
+                    )
+                    .unwrap();
+                }
+                write!(
+                    &mut steady_states_json,
+                    "    \"{columns_json}\"{}",
+                    if row_idx < 5 { ",\n" } else { "\n" }
+                )
+                .unwrap();
+            }
+            write!(
+                &mut steady_states_json,
+                "  ]{}\n",
+                if idx + 1 < self.steady.len() { "," } else { "" }
+            )
+            .unwrap();
+        }
+        write!(&mut steady_states_json, "]\n").unwrap();
+
+        (branches_json, steady_states_json)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -989,12 +1141,11 @@ fn main() {
     let ss_uses = graph.check();
     graph.populate_steady_state_blanks(ss_uses);
     graph.reduce_steady_state_values();
-    let steady_state_reindexing = graph.dedup_steady_states();
+    graph.dedup_steady_states();
     graph.check();
     graph.print_stats();
+    let (branches_json, steady_states_json) = graph.to_json();
+    fs::write("branches.json", branches_json).unwrap();
+    fs::write("steady_states.json", steady_states_json).unwrap();
     println!("Done");
-
-    // use these to update branches.json and steady_states.json
-    // graph.print_steady_states();
-    // println!("{:?}", steady_state_reindexing);
 }
