@@ -125,6 +125,28 @@ if (!back) {
     };
     selectSymbol('');
 
+    // Shortcuts that paint every open cell with one level at once.
+    var fillRow = document.createElement('div');
+    ['1', '5', '9'].forEach((symbol) => {
+        var btn = document.createElement('button');
+        btn.textContent = 'All ' + symbol;
+        btn.style.margin = '1px';
+        btn.style.fontWeight = 'bold';
+        btn.style.color = LEVEL_COLOR[symbol];
+        btn.addEventListener('click', () => {
+            for (let y = 0; y < h; y++) {
+                var row = rows[y] || '';
+                for (let x = 0; x < w; x++) {
+                    if (!isDisk(row[x])) guess[y][x] = symbol;
+                }
+            }
+            saveGuess(guess);
+            render();
+        });
+        fillRow.appendChild(btn);
+    });
+    paletteEl.appendChild(fillRow);
+
     document.addEventListener('keydown', (e) => {
         var entry = paintKeys.find((p) => p.key === e.key);
         if (entry) selectSymbol(entry.symbol);
