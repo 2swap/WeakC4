@@ -74,6 +74,113 @@ var drawRing = (x, y, color) => {
     ctx.stroke();
 };
 
+// A port of query_steady_state/verify_leaf from solution/validate_solution.py:
+// true iff Red, following the guessed diagram from this board, beats every
+// Yellow continuation. board[y][x] has y=0 at the bottom; 0 empty, 1 Red, 2 Yellow.
+var steadyStateWins = (levels) => {
+    var board = [];
+    var heights = [];
+    for (let y = 0; y < h; y++) {
+        board.push([]);
+        for (let x = 0; x < w; x++) {
+            var ch = (rows[h - 1 - y] || '')[x];
+            board[y].push(ch === 'R' ? 1 : ch === 'Y' ? 2 : 0);
+        }
+    }
+    for (let x = 0; x < w; x++) {
+        var y = 0;
+        while (y < h && board[y][x]) y++;
+        heights.push(y);
+    }
+
+    var makesFour = (x, y, player) => {
+        var dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+        for (let d = 0; d < dirs.length; d++) {
+            var count = 1;
+            for (let sign = -1; sign <= 1; sign += 2) {
+                var nx = x + sign * dirs[d][0], ny = y + sign * dirs[d][1];
+                while (nx >= 0 && nx < w && ny >= 0 && ny < h && board[ny][nx] === player) {
+                    count++;
+                    nx += sign * dirs[d][0];
+                    ny += sign * dirs[d][1];
+                }
+            }
+            if (count >= 4) return true;
+        }
+        return false;
+    };
+
+    var winsAt = (x, player) => {
+        var y = heights[x];
+        if (y >= h) return false;
+        board[y][x] = player;
+        var won = makesFour(x, y, player);
+        board[y][x] = 0;
+        return won;
+    };
+
+    var full = () => heights.every((ht) => ht >= h);
+
+    // Red's column per the priority list, or -1 for a tie or no instruction.
+    var redMove = () => {
+        for (let player = 1; player <= 2; player++) {
+            for (let x = 0; x < w; x++) if (winsAt(x, player)) return x;
+        }
+        for (let i = 0; i < LEVELS.length; i++) {
+            var found = [];
+            for (let x = 0; x < w; x++) {
+                if (heights[x] < h && levels[h - 1 - heights[x]][x] === LEVELS[i]) found.push(x);
+            }
+            if (found.length === 1) return found[0];
+        }
+        return -1;
+    };
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            if (board[y][x] && makesFour(x, y, board[y][x])) return false;
+        }
+    }
+
+    var memo = {};
+    var redTurn = () => {
+        var key = board.map((r) => r.join('')).join('');
+        if (memo[key]) return true;
+        var x = redMove();
+        if (x < 0) return false;
+        var y = heights[x];
+        board[y][x] = 1;
+        heights[x]++;
+        var ok = true;
+        if (!makesFour(x, y, 1)) {
+            if (full()) ok = false;
+            for (let yx = 0; ok && yx < w; yx++) {
+                var yy = heights[yx];
+                if (yy >= h) continue;
+                board[yy][yx] = 2;
+                heights[yx]++;
+                ok = !makesFour(yx, yy, 2) && !full() && redTurn();
+                heights[yx]--;
+                board[yy][yx] = 0;
+            }
+        }
+        heights[x]--;
+        board[y][x] = 0;
+        if (ok) memo[key] = true;
+        return ok;
+    };
+    return redTurn();
+};
+
+var guessWins = back ? steadyStateWins(guess) : false;
+if (back) {
+    var textEl = document.getElementById('text');
+    textEl.textContent = guessWins
+        ? 'Your steady state wins!'
+        : 'Your steady state does not win. Here is the reference; red rings mark where yours differs.';
+    textEl.style.color = guessWins ? CORRECT_COLOR : WRONG_COLOR;
+}
+
 var render = () => {
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) drawDisk(x, y, EMPTY);
@@ -89,6 +196,11 @@ var render = () => {
             if (back) {
                 let actual = LEVEL_COLOR[ch] ? ch : '';
                 let guessed = (guess[y] && guess[y][x]) || '';
+                if (guessWins) {
+                    // Any winning diagram is right: show the user's own.
+                    if (guessed) drawSymbol(x, y, guessed, LEVEL_COLOR[guessed]);
+                    continue;
+                }
                 if (actual) drawSymbol(x, y, actual, LEVEL_COLOR[actual]);
                 else if (guessed) drawSymbol(x, y, guessed, '#888');
                 if (actual || guessed) drawRing(x, y, guessed === actual ? CORRECT_COLOR : WRONG_COLOR);
