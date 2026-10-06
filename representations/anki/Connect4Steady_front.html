@@ -28,7 +28,8 @@ for (var i = 0; i < LEVELS.length; i++) LEVEL_COLOR[LEVELS[i]] = 'hsl(' + Math.r
 
 var isDisk = (ch) => ch === 'R' || ch === 'Y';
 
-var blankGuess = () => rows.map((row) => row.split('').map(() => ''));
+// Every open cell starts at the weakest level, 9.
+var blankGuess = () => rows.map((row) => row.split('').map((ch) => isDisk(ch) ? '' : '9'));
 
 var loadGuess = () => {
     try {
@@ -47,7 +48,7 @@ var saveGuess = (guess) => {
 // was guessed during the front view that just happened, for grading.
 var guess = back ? loadGuess() : blankGuess();
 if (!back) saveGuess(guess);
-var selectedSymbol = '';
+var selectedSymbol = LEVELS[0];
 
 var drawDisk = (x, y, color) => {
     var cx = (x + 0.5) * 50;
@@ -215,15 +216,15 @@ var render = () => {
 if (!back) {
     var paletteEl = document.getElementById('palette');
     var swatchEls = {};
-    var paintKeys = [{ key: '.', symbol: '' }];
+    var paintKeys = [];
     for (var k = 0; k < LEVELS.length; k++) paintKeys.push({ key: LEVELS[k], symbol: LEVELS[k] });
 
     paintKeys.forEach((entry) => {
         var btn = document.createElement('button');
-        btn.textContent = entry.symbol || '✕';
+        btn.textContent = entry.symbol;
         btn.style.margin = '1px';
         btn.style.fontWeight = 'bold';
-        btn.style.color = entry.symbol ? LEVEL_COLOR[entry.symbol] : '#eee';
+        btn.style.color = LEVEL_COLOR[entry.symbol];
         btn.addEventListener('click', () => selectSymbol(entry.symbol));
         paletteEl.appendChild(btn);
         swatchEls[entry.symbol] = btn;
@@ -232,10 +233,10 @@ if (!back) {
     var selectSymbol = (symbol) => {
         selectedSymbol = symbol;
         paintKeys.forEach((entry) => {
-            swatchEls[entry.symbol].style.outline = entry.symbol === symbol ? '2px solid #fff' : 'none';
+            swatchEls[entry.symbol].style.background = entry.symbol === symbol ? '#36f' : '';
         });
     };
-    selectSymbol('');
+    selectSymbol(LEVELS[0]);
 
     // Shortcuts that paint every open cell with one level at once.
     var fillRow = document.createElement('div');
