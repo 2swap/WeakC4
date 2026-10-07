@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::hash::Hash;
 use std::{collections::HashMap, fmt::Debug, fs};
+use varisat::ExtendFormula;
+use varisat::{Lit, Solver, Var};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Finite)]
 pub enum Row {
@@ -742,6 +744,33 @@ impl Graph {
         }
     }
 
+    pub fn make_steady_states_unique_per_leaf(&mut self) {
+        let mut used_ss_indexes: BTreeSet<usize> = BTreeSet::new();
+
+        for node in &mut self.nodes {
+            for column in Column::iter() {
+                match &mut node.responses[column] {
+                    Some(Response::Steady {
+                        flip: _flip,
+                        ss_idx,
+                    }) => {
+                        if used_ss_indexes.contains(ss_idx) {
+                            let new_ss_idx = self.steady.len();
+                            self.steady.push(self.steady[*ss_idx].clone());
+                            *ss_idx = new_ss_idx;
+                            used_ss_indexes.insert(new_ss_idx);
+                        } else {
+                            used_ss_indexes.insert(*ss_idx);
+                        }
+                    }
+                    Some(Response::Lookup { .. }) => {}
+                    Some(Response::ObviousSteady) => {}
+                    None => {}
+                }
+            }
+        }
+    }
+
     pub fn dedup_steady_states(&mut self) -> HashMap<usize, (usize, bool)> {
         let mut steady_state_reindexing = (0..self.steady.len()).map(|i| (i, (i, false))).collect();
 
@@ -855,7 +884,7 @@ impl Graph {
                             // ss_overlap_reduced.pprint();
                             // println!("{:?}", a_to_b);
                             // println!("{:?}", b_to_a);
-                            println!("Merging steady states {a} and {b}");
+                            // println!("Merging steady states {a} and {b}");
 
                             drop(a_to_overlap);
                             drop(overlap_to_a);
@@ -896,16 +925,19 @@ impl Graph {
                                 }
                             });
 
-                            // ss_merged.pprint();
+                            // don't merge if it would take the largest steady state symbol above 9
+                            // m_counter is 1 greater than the largest non-blank value in ss_merged
+                            if m_counter - 1 <= 9 {
+                                self.steady[b] = ss_merged;
+                                self.reroute_steady_state_idx(
+                                    &mut steady_state_reindexing,
+                                    a,
+                                    b,
+                                    flip_b,
+                                );
 
-                            self.steady[b] = ss_merged;
-                            self.reroute_steady_state_idx(
-                                &mut steady_state_reindexing,
-                                a,
-                                b,
-                                flip_b,
-                            );
-                            continue 'LOOP;
+                                continue 'LOOP;
+                            }
                         }
                     }
                 }
@@ -1135,15 +1167,89 @@ pub struct SteadyStateUses {
     points: Vec<RowAndColumn>,
 }
 
+fn solve_k_coloring<F>(n: usize, compatible: F, k: usize) -> Option<Vec<Vec<usize>>>
+where
+    F: Fn(usize, usize) -> bool,
+{
+    let mut solver = Solver::new();
+
+    // x[v][c] = SAT variable meaning "vertex v has color c".
+    let mut x = vec![vec![Var::from_index(0); k]; n];
+
+    for v in 0..n {
+        for c in 0..k {
+            x[v][c] = solver.new_var();
+        }
+    }
+
+    // Every vertex gets at least one color.
+    for v in 0..n {
+        let clause: Vec<Lit> = (0..k).map(|c| Lit::from_var(x[v][c], true)).collect();
+
+        solver.add_clause(&clause);
+    }
+
+    // Every vertex gets at most one color.
+    for v in 0..n {
+        for c1 in 0..k {
+            for c2 in (c1 + 1)..k {
+                solver.add_clause(&[
+                    Lit::from_var(x[v][c1], false),
+                    Lit::from_var(x[v][c2], false),
+                ]);
+            }
+        }
+    }
+
+    // Incompatible vertices cannot have the same color.
+    for u in 0..n {
+        for v in (u + 1)..n {
+            if !compatible(u, v) {
+                for c in 0..k {
+                    solver.add_clause(&[
+                        Lit::from_var(x[u][c], false),
+                        Lit::from_var(x[v][c], false),
+                    ]);
+                }
+            }
+        }
+    }
+
+    if !solver.solve().unwrap() {
+        return None;
+    }
+
+    let model = solver.model().unwrap();
+
+    let mut classes = vec![Vec::new(); k];
+
+    for v in 0..n {
+        for c in 0..k {
+            let literal = Lit::from_var(x[v][c], true);
+
+            if model.contains(&literal) {
+                classes[c].push(v);
+                break;
+            }
+        }
+    }
+
+    classes.retain(|c| !c.is_empty());
+
+    Some(classes)
+}
+
 fn main() {
     let mut graph = Graph::load();
     graph.print_stats();
+    graph.make_steady_states_unique_per_leaf();
+    graph.reduce_steady_state_values();
     let ss_uses = graph.check();
     graph.populate_steady_state_blanks(ss_uses);
     graph.reduce_steady_state_values();
     graph.dedup_steady_states();
-    graph.check();
     graph.print_stats();
+    graph.check();
     let (branches_json, steady_states_json) = graph.to_json();
     fs::write("branches.json", branches_json).unwrap();
     fs::write("steady_states.json", steady_states_json).unwrap();
