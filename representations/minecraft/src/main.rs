@@ -884,7 +884,7 @@ impl Graph {
                             // ss_overlap_reduced.pprint();
                             // println!("{:?}", a_to_b);
                             // println!("{:?}", b_to_a);
-                            // println!("Merging steady states {a} and {b}");
+                            println!("Merging steady states {a} and {b}");
 
                             drop(a_to_overlap);
                             drop(overlap_to_a);
