@@ -50,6 +50,18 @@ impl Column {
             Column::C7 => '7',
         }
     }
+
+    pub fn to_num(&self) -> usize {
+        match self {
+            Column::C1 => 1,
+            Column::C2 => 2,
+            Column::C3 => 3,
+            Column::C4 => 4,
+            Column::C5 => 5,
+            Column::C6 => 6,
+            Column::C7 => 7,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Finite)]
@@ -409,6 +421,7 @@ pub enum Response {
 
 #[derive(Clone)]
 pub struct Node {
+    board: Board,
     responses: ArrayMap<Column, Option<Response>>,
 }
 
@@ -526,6 +539,7 @@ impl Graph {
                 }
 
                 let node = Node {
+                    board: board.clone(),
                     responses: ArrayMap::new(|column| {
                         board.clone().play(column).map(|next_board| {
                             let (branch_edge, flip) = self
@@ -750,6 +764,26 @@ impl Graph {
     pub fn reduce_steady_state_values(&mut self) {
         for steady in &mut self.steady {
             *steady = steady.clone().reduce_values();
+        }
+    }
+
+    pub fn eliminate_obvious_steadys(&mut self) {
+        assert!(!self.steady.is_empty());
+        for node in &mut self.nodes {
+            for column in Column::iter() {
+                if let Some(response) = &mut node.responses[column] {
+                    match response {
+                        Response::ObviousSteady => {
+                            *response = Response::Steady {
+                                flip: false,
+                                ss_idx: 0,
+                            };
+                        }
+                        Response::Steady { .. } => {}
+                        Response::Lookup { .. } => {}
+                    }
+                }
+            }
         }
     }
 
@@ -1178,28 +1212,159 @@ impl Graph {
     pub fn to_mc_schem(&self) {
         use redstone_schem::examples::rom_16kb_barrel::Rom;
 
-        #[derive(Clone)]
+        #[derive(Debug)]
         struct LookupColumn {
             flip: bool,
             response: Column,
             next: usize,
         }
 
-        #[derive(Clone)]
         enum TableEntry {
-            Lookup(ArrayMap<Column, LookupColumn>),
+            Lookup(ArrayMap<Column, Option<LookupColumn>>),
             Steady(LabelledBoard<SteadyStateSymbol>),
         }
-
-        let mut rom = Rom::default();
-
-        fn search(graph : &Graph) {
-            
+        impl std::fmt::Debug for TableEntry {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    Self::Lookup(arg0) => f
+                        .debug_tuple("Lookup")
+                        .field(
+                            &Column::iter()
+                                .map(|column| &arg0[column])
+                                .collect::<Vec<_>>(),
+                        )
+                        .finish(),
+                    Self::Steady(arg0) => f.debug_tuple("Steady").field(arg0).finish(),
+                }
+            }
         }
 
-        search(self);
+        #[derive(Debug)]
+        struct Table {
+            entries: Vec<Option<TableEntry>>,
+            // from graph ss_idx to entry idx
+            steady_map: HashMap<usize, usize>,
+            node_map: HashMap<usize, usize>,
+        }
 
-        todo!();
+        impl Table {
+            fn add_steady_node(
+                &mut self,
+                graph: &Graph,
+                ss_idx: usize,
+                steady: &LabelledBoard<SteadyStateSymbol>,
+            ) -> usize {
+                if self.steady_map.contains_key(&ss_idx) {
+                    *self.steady_map.get(&ss_idx).unwrap()
+                } else {
+                    let idx = self.entries.len();
+                    self.entries.push(Some(TableEntry::Steady(steady.clone())));
+                    self.steady_map.insert(ss_idx, idx);
+                    idx
+                }
+            }
+
+            fn add_lookup_node(&mut self, graph: &Graph, node_idx: usize) -> usize {
+                if self.node_map.contains_key(&node_idx) {
+                    *self.node_map.get(&node_idx).unwrap()
+                } else {
+                    let node = &graph.nodes[node_idx];
+
+                    let idx = self.entries.len();
+                    self.entries.push(None);
+                    let mut lookup = ArrayMap::new(|column| None);
+                    for column in Column::iter() {
+                        let entry = if let Some(response) = node.responses[column] {
+                            match response {
+                                Response::ObviousSteady => {
+                                    panic!("eliminate any ObviousSteady first")
+                                }
+                                Response::Steady { flip, ss_idx } => {
+                                    let next =
+                                        self.add_steady_node(graph, ss_idx, &graph.steady[ss_idx]);
+                                    let mut steady = graph.steady[ss_idx].clone();
+                                    if flip {
+                                        steady = steady.flip();
+                                    }
+                                    LookupColumn {
+                                        flip: flip,
+                                        response: steady.select_column(
+                                            &node.board.clone().play(column).unwrap(),
+                                            &mut vec![],
+                                        ),
+                                        next,
+                                    }
+                                }
+                                Response::Lookup { column, node } => {
+                                    let next = self.add_lookup_node(graph, node.idx);
+                                    LookupColumn {
+                                        flip: node.flip,
+                                        response: column,
+                                        next,
+                                    }
+                                }
+                            }
+                        } else {
+                            LookupColumn {
+                                flip: false,
+                                response: Column::C4,
+                                next: 0,
+                            }
+                        };
+                        lookup[column] = Some(entry);
+                    }
+                    self.entries[idx] = Some(TableEntry::Lookup(lookup));
+                    self.node_map.insert(node_idx, idx);
+                    idx
+                }
+            }
+        }
+
+        let mut table = Table {
+            entries: vec![],
+            steady_map: HashMap::new(),
+            node_map: HashMap::new(),
+        };
+        let idx = table.add_lookup_node(self, self.first_node.idx);
+        assert_eq!(idx, 0); // assumed by MC implementation
+
+        let mut rom = Rom::default();
+        let mut ptr = 0;
+        for entry in table.entries {
+            match entry.unwrap() {
+                TableEntry::Lookup(lookups) => {
+                    rom.data[ptr] = 0b01111111; // top bit 0 for lookup
+                    let mut i = ptr + 1; // start of lookup data 
+                    for column in Column::iter() {
+                        rom.data[i] = 0;
+                        rom.data[i + 1] = 0;
+                        if let Some(lookup) = &lookups[column] {
+                            let mut data16: u16 = lookup.next as u16;
+                            if lookup.flip {
+                                data16 |= 0b0001000000000000; // this bit is the flip bit
+                            }
+                            data16 |= (lookup.response.to_num() as u16) << 13;
+                            for j in 0..16 {
+                                if (data16 >> j) & 1 == 1 {
+                                    rom.data[i + { if j % 2 == 0 { 0 } else { 1 } }] |=
+                                        1 << (j / 2);
+                                }
+                            }
+                        }
+                        i += 2;
+                    }
+                    ptr += 4 * 4;
+                }
+                TableEntry::Steady(labelled_board) => {
+                    rom.data[ptr] = 0b10000000; // top bit 1 for steady
+                    let i = ptr + 1; // start of steady state 
+                    // todo!("populate rom at ptr with steady state");
+                    ptr += 4 * 7;
+                }
+            }
+        }
+
+        println!("{:?}", rom.data);
 
         let schem = rom.to_schem();
         let mut file = std::fs::File::create("rom.schem").unwrap();
@@ -1233,6 +1398,7 @@ pub fn shrink() {
 pub fn make_mc_schem() {
     let mut graph = Graph::load();
     graph.reduce_steady_state_values();
+    graph.eliminate_obvious_steadys();
     graph.print_stats();
     graph.to_mc_schem();
 }
