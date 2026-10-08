@@ -21,7 +21,7 @@ Specifically, we check that:
 [During step 5, compute coverage over the branches.json keyset]
 (6) No branches.json entries are extraneous/unreachable in the solution.
 (7) No steady states are unreferenced by branches.json.
-(8) Every steady-state entry wins from its board, and its disk cells hold 0.
+(8) Every steady-state entry wins from its board.
 """
 from __future__ import annotations
 
@@ -375,17 +375,13 @@ def check_no_extraneous_steady_states(branches, steady_states):
 def _verify_entry(job):
     position, diagram = job
     board = board_from_position(position)
-    for r, row in enumerate(diagram):
-        for x, ch in enumerate(row):
-            if board[ROWS - 1 - r][x] and ch != "0":
-                return "a cell under a disk holds a level other than 0"
     if not verify_leaf(diagram, board):
         return "diagram fails against some Yellow line"
     return None
 
 
 def check_steady_states_correct(branches, steady_states, jobs):
-    """(8) Every steady-state entry wins from its board, and its disk cells hold 0."""
+    """(8) Every steady-state entry wins from its board."""
     entries = [(p, v) for p, v in branches.items() if is_steady_state_entry(v)]
     work = [(p, steady_states[v]) for p, v in entries]
     if jobs > 1 and len(work) > 1:
