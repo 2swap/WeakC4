@@ -4,8 +4,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::hash::Hash;
 use std::{collections::HashMap, fmt::Debug, fs};
-use varisat::ExtendFormula;
-use varisat::{Lit, Solver, Var};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Finite)]
 pub enum Row {
@@ -288,6 +286,17 @@ impl LabelledBoard<SteadyStateSymbol> {
             }
             println!()
         }
+    }
+
+    pub fn count_non_blank(&self) -> usize {
+        let mut count = 0;
+        for p in RowAndColumn::iter() {
+            match self.entries[p] {
+                SteadyStateSymbol::Blank => {}
+                SteadyStateSymbol::Value(_) => count += 1,
+            }
+        }
+        count
     }
 }
 
@@ -774,7 +783,8 @@ impl Graph {
     pub fn dedup_steady_states(&mut self) -> HashMap<usize, (usize, bool)> {
         let mut steady_state_reindexing = (0..self.steady.len()).map(|i| (i, (i, false))).collect();
 
-        'LOOP: loop {
+        loop {
+            let mut mergable = vec![];
             let n = self.steady.len();
             for a in 0..n {
                 for b in 0..a {
@@ -884,7 +894,9 @@ impl Graph {
                             // ss_overlap_reduced.pprint();
                             // println!("{:?}", a_to_b);
                             // println!("{:?}", b_to_a);
-                            println!("Merging steady states {a} and {b}");
+
+                            let overlap_nonblank_count =
+                                ss_overlap_reduced.count_non_blank() as i64;
 
                             drop(a_to_overlap);
                             drop(overlap_to_a);
@@ -928,21 +940,24 @@ impl Graph {
                             // don't merge if it would take the largest steady state symbol above 9
                             // m_counter is 1 greater than the largest non-blank value in ss_merged
                             if m_counter - 1 <= 9 {
-                                self.steady[b] = ss_merged;
-                                self.reroute_steady_state_idx(
-                                    &mut steady_state_reindexing,
-                                    a,
-                                    b,
-                                    flip_b,
-                                );
-
-                                continue 'LOOP;
+                                // using overlap_nonblank_count as a score here seems to work reasonably well
+                                // so we're merging things which look most similar first and least similar last
+                                mergable.push(((a, b, flip_b, ss_merged), overlap_nonblank_count));
                             }
                         }
                     }
                 }
             }
-            break;
+
+            if mergable.is_empty() {
+                break;
+            } else {
+                mergable.sort_unstable_by_key(|(_, score)| *score);
+                let ((a, b, flip_b, ss_merged), _) = mergable.pop().unwrap();
+                println!("Merging steady states {a} and {b}");
+                self.steady[b] = ss_merged;
+                self.reroute_steady_state_idx(&mut steady_state_reindexing, a, b, flip_b);
+            }
         }
 
         steady_state_reindexing
@@ -1159,6 +1174,31 @@ impl Graph {
 
         (branches_json, steady_states_json)
     }
+
+    pub fn to_mc_schem(&self) {
+        use redstone_schem::examples::rom_16kb_barrel::Rom;
+
+        #[derive(Clone)]
+        struct LookupColumn {
+            flip: bool,
+            response: Column,
+            next: usize,
+        }
+
+        #[derive(Clone)]
+        enum TableEntry {
+            Lookup(ArrayMap<Column, LookupColumn>),
+            Steady(LabelledBoard<SteadyStateSymbol>),
+        }
+
+        let mut rom = Rom::default();
+
+        todo!();
+
+        let schem = rom.to_schem();
+        let mut file = std::fs::File::create("rom.schem").unwrap();
+        schem.finish(&mut file).unwrap();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1167,79 +1207,7 @@ pub struct SteadyStateUses {
     points: Vec<RowAndColumn>,
 }
 
-fn solve_k_coloring<F>(n: usize, compatible: F, k: usize) -> Option<Vec<Vec<usize>>>
-where
-    F: Fn(usize, usize) -> bool,
-{
-    let mut solver = Solver::new();
-
-    // x[v][c] = SAT variable meaning "vertex v has color c".
-    let mut x = vec![vec![Var::from_index(0); k]; n];
-
-    for v in 0..n {
-        for c in 0..k {
-            x[v][c] = solver.new_var();
-        }
-    }
-
-    // Every vertex gets at least one color.
-    for v in 0..n {
-        let clause: Vec<Lit> = (0..k).map(|c| Lit::from_var(x[v][c], true)).collect();
-
-        solver.add_clause(&clause);
-    }
-
-    // Every vertex gets at most one color.
-    for v in 0..n {
-        for c1 in 0..k {
-            for c2 in (c1 + 1)..k {
-                solver.add_clause(&[
-                    Lit::from_var(x[v][c1], false),
-                    Lit::from_var(x[v][c2], false),
-                ]);
-            }
-        }
-    }
-
-    // Incompatible vertices cannot have the same color.
-    for u in 0..n {
-        for v in (u + 1)..n {
-            if !compatible(u, v) {
-                for c in 0..k {
-                    solver.add_clause(&[
-                        Lit::from_var(x[u][c], false),
-                        Lit::from_var(x[v][c], false),
-                    ]);
-                }
-            }
-        }
-    }
-
-    if !solver.solve().unwrap() {
-        return None;
-    }
-
-    let model = solver.model().unwrap();
-
-    let mut classes = vec![Vec::new(); k];
-
-    for v in 0..n {
-        for c in 0..k {
-            let literal = Lit::from_var(x[v][c], true);
-
-            if model.contains(&literal) {
-                classes[c].push(v);
-                break;
-            }
-        }
-    }
-
-    classes.retain(|c| !c.is_empty());
-
-    Some(classes)
-}
-
-fn main() {
+pub fn shrink() {
     let mut graph = Graph::load();
     graph.print_stats();
     graph.make_steady_states_unique_per_leaf();
@@ -1248,10 +1216,21 @@ fn main() {
     graph.populate_steady_state_blanks(ss_uses);
     graph.reduce_steady_state_values();
     graph.dedup_steady_states();
-    graph.print_stats();
     graph.check();
+    graph.print_stats();
     let (branches_json, steady_states_json) = graph.to_json();
     fs::write("branches.json", branches_json).unwrap();
     fs::write("steady_states.json", steady_states_json).unwrap();
     println!("Done");
+}
+
+pub fn make_mc_schem() {
+    let mut graph = Graph::load();
+    graph.reduce_steady_state_values();
+    graph.print_stats();
+    graph.to_mc_schem();
+}
+
+fn main() {
+    make_mc_schem();
 }
