@@ -1193,6 +1193,12 @@ impl Graph {
 
         let mut rom = Rom::default();
 
+        fn search(graph : &Graph) {
+            
+        }
+
+        search(self);
+
         todo!();
 
         let schem = rom.to_schem();
