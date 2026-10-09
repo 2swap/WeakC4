@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Connect-4 Steady State</title>
+    <style>
+        body {
+          margin: 0;
+          padding: 10px;
+          font-family: 'Arial', sans-serif;
+          color: #fff;
+          background-color: #000;
+        }
+        #modes {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 10px 0;
+        }
+        #modes button {
+          padding: 13px 21px;
+          font-size: 18px;
+          font-family: 'Arial', sans-serif;
+          color: #fff;
+          background-color: #337;
+          border: 1px solid #77b;
+          border-radius: 6px;
+          cursor: pointer;
+          touch-action: manipulation;
+        }
+        #modes button:hover {
+          background-color: #449;
+          border-color: #bbf;
+        }
+        #modes button.active {
+          background-color: #55b;
+          border-color: #bbf;
+        }
+        #modes button:disabled {
+          opacity: .4;
+          cursor: default;
+        }
+        #status {
+          font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="board"></canvas>
+    <div id="modes">
+        <button id="mode-diagram" class="active">Steady State</button>
+        <button id="mode-color" disabled>Red / Yellow</button>
+        <button id="mode-win" disabled>Winning Lines</button>
+    </div>
+    <div id="status">Validating and collecting statistics...</div>
+
+    <script src="graph.js"></script>
+    <script src="c4.js"></script>
+    <script src="steadystate.js"></script>
+</body>
+</html>
