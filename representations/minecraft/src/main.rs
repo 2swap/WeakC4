@@ -1416,7 +1416,8 @@ impl Graph {
                                     SteadyStateSymbol::Blank => false,
                                     SteadyStateSymbol::Value(value) => (value >> b) & 1 == 1,
                                 } {
-                                    rom.data[addr + 31 - (b + 4 * column.to_num_0_to_6())] |=
+                                    rom.data[addr + 31
+                                        - ((3 - b) + 4 * (6 - column.to_num_0_to_6()))] |=
                                         1 << row.to_num();
                                 }
                             }
@@ -1442,9 +1443,11 @@ impl Graph {
             val16
         };
 
-        let idx = 2;
+        let idx = 26;
 
         let ptr = entry_addrs[idx];
+
+        println!("ptr = {:016b}", ptr);
 
         for x in &rom.data[ptr..(ptr + 32)] {
             println!("{:08b}", x);
@@ -1465,9 +1468,9 @@ impl Graph {
         let val16 = interlace_u8(rom.data[ptr + 31 - 13], rom.data[ptr + 31 - 14]);
         println!("{:016b} {}", val16, 4 * (val16 & 0b0000111111111111));
 
-        for column in Column::iter() {
-            match &table.entries[idx] {
-                TableEntry::Lookup(lookup) => {
+        match &table.entries[idx] {
+            TableEntry::Lookup(lookup) => {
+                for column in Column::iter() {
                     let x = entry_addrs[lookup[column].as_ref().unwrap().next];
                     println!(
                         "{} : {:?} -> {:?}",
@@ -1476,7 +1479,9 @@ impl Graph {
                         x
                     );
                 }
-                _ => panic!(),
+            }
+            TableEntry::Steady(steady) => {
+                steady.pprint();
             }
         }
 
