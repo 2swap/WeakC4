@@ -15,6 +15,19 @@ pub enum Row {
     R5, // top row
 }
 
+impl Row {
+    pub fn to_num(&self) -> usize {
+        match self {
+            Row::R0 => 0,
+            Row::R1 => 1,
+            Row::R2 => 2,
+            Row::R3 => 3,
+            Row::R4 => 4,
+            Row::R5 => 5,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Finite)]
 pub enum Column {
     C1, // leftmost
@@ -51,7 +64,7 @@ impl Column {
         }
     }
 
-    pub fn to_num(&self) -> usize {
+    pub fn to_num_1_to_7(&self) -> usize {
         match self {
             Column::C1 => 1,
             Column::C2 => 2,
@@ -60,6 +73,18 @@ impl Column {
             Column::C5 => 5,
             Column::C6 => 6,
             Column::C7 => 7,
+        }
+    }
+
+    pub fn to_num_0_to_6(&self) -> usize {
+        match self {
+            Column::C1 => 0,
+            Column::C2 => 1,
+            Column::C3 => 2,
+            Column::C4 => 3,
+            Column::C5 => 4,
+            Column::C6 => 5,
+            Column::C7 => 6,
         }
     }
 }
@@ -1223,6 +1248,7 @@ impl Graph {
             Lookup(ArrayMap<Column, Option<LookupColumn>>),
             Steady(LabelledBoard<SteadyStateSymbol>),
         }
+
         impl std::fmt::Debug for TableEntry {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
@@ -1241,9 +1267,10 @@ impl Graph {
 
         #[derive(Debug)]
         struct Table {
-            entries: Vec<Option<TableEntry>>,
-            // from graph ss_idx to entry idx
+            entries: Vec<TableEntry>,
+            // graph ss_idx to entry idx
             steady_map: HashMap<usize, usize>,
+            // node idx to entry idx
             node_map: HashMap<usize, usize>,
         }
 
@@ -1258,7 +1285,7 @@ impl Graph {
                     *self.steady_map.get(&ss_idx).unwrap()
                 } else {
                     let idx = self.entries.len();
-                    self.entries.push(Some(TableEntry::Steady(steady.clone())));
+                    self.entries.push(TableEntry::Steady(steady.clone()));
                     self.steady_map.insert(ss_idx, idx);
                     idx
                 }
@@ -1271,7 +1298,8 @@ impl Graph {
                     let node = &graph.nodes[node_idx];
 
                     let idx = self.entries.len();
-                    self.entries.push(None);
+                    self.entries
+                        .push(TableEntry::Lookup(ArrayMap::new(|_column| None))); // placeholder to be populated
                     let mut lookup = ArrayMap::new(|column| None);
                     for column in Column::iter() {
                         let entry = if let Some(response) = node.responses[column] {
@@ -1313,7 +1341,7 @@ impl Graph {
                         };
                         lookup[column] = Some(entry);
                     }
-                    self.entries[idx] = Some(TableEntry::Lookup(lookup));
+                    self.entries[idx] = TableEntry::Lookup(lookup);
                     self.node_map.insert(node_idx, idx);
                     idx
                 }
@@ -1328,47 +1356,135 @@ impl Graph {
         let idx = table.add_lookup_node(self, self.first_node.idx);
         assert_eq!(idx, 0); // assumed by MC implementation
 
+        let entry_count = table.entries.len();
+
+        let mut addr = 0;
+        let mut entry_addrs = vec![];
+        for entry in &table.entries {
+            // an entry at addr skims off the most significant chunk of rom[addr..addr+32]
+            match entry {
+                TableEntry::Lookup(_) => {
+                    addr += 4 * 4;
+                }
+                TableEntry::Steady(_) => {
+                    addr += 4 * 7;
+                }
+            }
+            entry_addrs.push(addr - 16); // rotate everything by 16 so that entry 0 has address 0
+        }
+        assert_eq!(entry_addrs[0], 0);
+        assert_eq!(entry_addrs.len(), entry_count);
+
         let mut rom = Rom::default();
-        let mut ptr = 0;
-        for entry in table.entries {
-            match entry.unwrap() {
+        let or_insert_u16 = |rom: &mut Rom, dest_addr: usize, value: u16| {
+            for j in 0..16 {
+                if (value >> j) & 1 == 1 {
+                    rom.data[dest_addr - { if j % 2 == 0 { 0 } else { 1 } }] |= 1 << (j / 2);
+                }
+            }
+        };
+        for entry_idx in 0..entry_count {
+            let entry = &table.entries[entry_idx];
+            let addr = entry_addrs[entry_idx];
+            match entry {
+                // remember here the LSB is on the right (looking at the MC build from side on) so we need to do a lot of 31-stuff to put the stuff on the correct side
                 TableEntry::Lookup(lookups) => {
-                    rom.data[ptr] = 0b01111111; // top bit 0 for lookup
-                    let mut i = ptr + 1; // start of lookup data 
+                    rom.data[addr + 31] = 0b01111111; // top bit 0 for lookup
+                    let mut i = 1; // start of lookup data
                     for column in Column::iter() {
-                        rom.data[i] = 0;
-                        rom.data[i + 1] = 0;
+                        rom.data[addr + 31 - i] = 0;
+                        rom.data[addr + 31 - (i + 1)] = 0;
                         if let Some(lookup) = &lookups[column] {
-                            let mut data16: u16 = lookup.next as u16;
+                            let mut data16: u16 = (entry_addrs[lookup.next] >> 2) as u16;
+                            assert_eq!(data16 & 0b1111000000000000, 0);
                             if lookup.flip {
                                 data16 |= 0b0001000000000000; // this bit is the flip bit
                             }
-                            data16 |= (lookup.response.to_num() as u16) << 13;
-                            for j in 0..16 {
-                                if (data16 >> j) & 1 == 1 {
-                                    rom.data[i + { if j % 2 == 0 { 0 } else { 1 } }] |=
-                                        1 << (j / 2);
-                                }
-                            }
+                            data16 |= (lookup.response.to_num_1_to_7() as u16) << 13;
+                            or_insert_u16(&mut rom, addr + 31 - i, data16);
                         }
                         i += 2;
                     }
-                    ptr += 4 * 4;
                 }
                 TableEntry::Steady(labelled_board) => {
-                    rom.data[ptr] = 0b10000000; // top bit 1 for steady
-                    let i = ptr + 1; // start of steady state 
-                    // todo!("populate rom at ptr with steady state");
-                    ptr += 4 * 7;
+                    rom.data[addr + 31] = 0b10000000; // top bit 1 for steady
+                    for column in Column::iter() {
+                        for row in Row::iter() {
+                            for b in 0..4 {
+                                let symbol = &labelled_board.entries[RowAndColumn { row, column }];
+                                if match symbol {
+                                    SteadyStateSymbol::Blank => false,
+                                    SteadyStateSymbol::Value(value) => (value >> b) & 1 == 1,
+                                } {
+                                    rom.data[addr + 31 - (b + 4 * column.to_num_0_to_6())] |=
+                                        1 << row.to_num();
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        println!("{:?}", rom.data);
+        let interlace_u8 = |a: u8, b: u8| -> u16 {
+            let mut val16: u16 = 0;
+            for i in 0..16 {
+                if i % 2 == 0 {
+                    if (a >> (i / 2)) & 1 == 1 {
+                        val16 |= 1 << i;
+                    }
+                } else {
+                    if (b >> (i / 2)) & 1 == 1 {
+                        val16 |= 1 << i;
+                    }
+                }
+            }
+            val16
+        };
 
-        let schem = rom.to_schem();
-        let mut file = std::fs::File::create("rom.schem").unwrap();
-        schem.finish(&mut file).unwrap();
+        let idx = 2;
+
+        let ptr = entry_addrs[idx];
+
+        for x in &rom.data[ptr..(ptr + 32)] {
+            println!("{:08b}", x);
+        }
+
+        let val16 = interlace_u8(rom.data[ptr + 31 - 1], rom.data[ptr + 31 - 2]);
+        println!("{:016b} {}", val16, 4 * (val16 & 0b0000111111111111));
+        let val16 = interlace_u8(rom.data[ptr + 31 - 3], rom.data[ptr + 31 - 4]);
+        println!("{:016b} {}", val16, 4 * (val16 & 0b0000111111111111));
+        let val16 = interlace_u8(rom.data[ptr + 31 - 5], rom.data[ptr + 31 - 6]);
+        println!("{:016b} {}", val16, 4 * (val16 & 0b0000111111111111));
+        let val16 = interlace_u8(rom.data[ptr + 31 - 7], rom.data[ptr + 31 - 8]);
+        println!("{:016b} {}", val16, 4 * (val16 & 0b0000111111111111));
+        let val16 = interlace_u8(rom.data[ptr + 31 - 9], rom.data[ptr + 31 - 10]);
+        println!("{:016b} {}", val16, 4 * (val16 & 0b0000111111111111));
+        let val16 = interlace_u8(rom.data[ptr + 31 - 11], rom.data[ptr + 31 - 12]);
+        println!("{:016b} {}", val16, 4 * (val16 & 0b0000111111111111));
+        let val16 = interlace_u8(rom.data[ptr + 31 - 13], rom.data[ptr + 31 - 14]);
+        println!("{:016b} {}", val16, 4 * (val16 & 0b0000111111111111));
+
+        for column in Column::iter() {
+            match &table.entries[idx] {
+                TableEntry::Lookup(lookup) => {
+                    let x = entry_addrs[lookup[column].as_ref().unwrap().next];
+                    println!(
+                        "{} : {:?} -> {:?}",
+                        lookup[column].as_ref().unwrap().next,
+                        column,
+                        x
+                    );
+                }
+                _ => panic!(),
+            }
+        }
+
+        for k in 0..8 {
+            let schem = rom.to_partial_schem((4 * k)..(4 * (k + 1)));
+            let mut file = std::fs::File::create(format!("rom{k}.schem")).unwrap();
+            schem.finish(&mut file).unwrap();
+        }
     }
 }
 
