@@ -778,6 +778,7 @@ dependencies = [
 [[package]]
 name = "redstone_schem"
 version = "0.0.1"
+source = "git+https://github.com/pishleback/RedstoneSchematicGenerator.git?rev=e263ece543c23ffc9428f36cc16bb7428de59402#e263ece543c23ffc9428f36cc16bb7428de59402"
 dependencies = [
  "mc_schem",
 ]
