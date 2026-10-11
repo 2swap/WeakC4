@@ -1,5 +1,0 @@
-{
-    "rust-analyzer.linkedProjects": [
-        "representations/minecraft/Cargo.toml"
-    ]
-}
