@@ -1162,9 +1162,14 @@ impl Graph {
 
         let mut branches: Vec<Branch> = vec![Branch {
             path: vec![],
-            next: BranchNext::Column(Column::C4),
+            next: BranchNext::Column(self.first_move),
         }];
-        populate_branches(self, &mut branches, self.first_node.idx, vec![Column::C4]);
+        populate_branches(
+            self,
+            &mut branches,
+            self.first_node.idx,
+            vec![self.first_move],
+        );
 
         let mut branches_json = String::new();
         let mut steady_states_json = String::new();
@@ -1331,6 +1336,7 @@ impl Graph {
                                 }
                             }
                         } else {
+                            // arbitrary data since it's not possible for player 2 to play in this column
                             LookupColumn {
                                 flip: false,
                                 response: Column::C4,
