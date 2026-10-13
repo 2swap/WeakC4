@@ -267,8 +267,8 @@ if (!back) {
 
     canvasEl.addEventListener('click', (e) => {
         var rect = canvasEl.getBoundingClientRect();
-        var x = Math.floor((e.clientX - rect.left) / 50);
-        var y = Math.floor((e.clientY - rect.top) / 50);
+        var x = Math.floor((e.clientX - rect.left) * canvasEl.width / rect.width / 50);
+        var y = Math.floor((e.clientY - rect.top) * canvasEl.height / rect.height / 50);
         if (x < 0 || x >= w || y < 0 || y >= h) return;
         var row = rows[y] || '';
         if (isDisk(row[x])) return;

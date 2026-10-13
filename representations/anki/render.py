@@ -140,6 +140,9 @@ def build_steady_states():
 def _mirror_key(key):
     return tuple(row[::-1] for row in key)
 
+def _mirror_sequence(seq):
+    return "".join(str(8 - int(move)) for move in seq)
+
 def _canon(key):
     """A board, canonicalized up to mirroring, matching how
     branches.json/steady_states.json dedupe boards."""
@@ -247,6 +250,12 @@ def build_practice():
     red_lookup, is_leaf = _build_lookup(branches)
 
     sequences = sorted(set(_build_practice_sequences(red_lookup, is_leaf, random.Random(42))))
+    # A line that is a proper prefix of another line (or of its mirror image)
+    # quizzes nothing the longer one doesn't, so drop it.
+    sequences = [seq for seq in sequences
+                 if not any(len(other) > len(seq) and
+                            (other.startswith(seq) or _mirror_sequence(other).startswith(seq))
+                            for other in sequences)]
 
     notes = [{
         "deckName": deck,

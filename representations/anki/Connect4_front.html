@@ -143,6 +143,12 @@ if(mode !== 'practice') {
 
     var canvasEl = document.getElementById('canvas');
 
+    var colFromEvent = (e) => {
+        var rect = canvasEl.getBoundingClientRect();
+        var xPixel = (e.clientX - rect.left) * canvasEl.width / rect.width;
+        return Math.floor(xPixel / 50);
+    };
+
     canvasEl.addEventListener('mousemove', function(e) {
         if(seqIndex >= seq.length) {
             hoverCol = -1;
@@ -155,9 +161,7 @@ if(mode !== 'practice') {
             render();
             return;
         }
-        var rect = canvasEl.getBoundingClientRect();
-        var xPixel = e.clientX - rect.left;
-        var colIndex = Math.floor(xPixel / 50);
+        var colIndex = colFromEvent(e);
         if(colIndex < 0 || colIndex >= w) {
             hoverCol = -1;
         } else {
@@ -175,9 +179,7 @@ if(mode !== 'practice') {
         if(seqIndex >= seq.length) return;
         // only allow click on player's turn
         if(seqIndex % 2 !== 0) return;
-        var rect = canvasEl.getBoundingClientRect();
-        var xPixel = e.clientX - rect.left;
-        var colIndex = Math.floor(xPixel / 50);
+        var colIndex = colFromEvent(e);
         if(colIndex < 0 || colIndex >= w) return;
         var expectedCol = parseInt(seq[seqIndex]) - 1;
         if(colIndex !== expectedCol) {
