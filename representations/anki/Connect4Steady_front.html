@@ -28,8 +28,7 @@ for (var i = 0; i < LEVELS.length; i++) LEVEL_COLOR[LEVELS[i]] = 'hsl(' + Math.r
 
 var isDisk = (ch) => ch === 'R' || ch === 'Y';
 
-// Every open cell starts at the weakest level, 9.
-var blankGuess = () => rows.map((row) => row.split('').map((ch) => isDisk(ch) ? '' : '9'));
+var blankGuess = () => rows.map((row, y) => row.split('').map((ch) => isDisk(ch) ? '' : ((h - y) % 2 === 0 ? '0' : '9')));
 
 var loadGuess = () => {
     try {
@@ -237,28 +236,6 @@ if (!back) {
         });
     };
     selectSymbol(LEVELS[0]);
-
-    // Shortcuts that paint every open cell with one level at once.
-    var fillRow = document.createElement('div');
-    ['1', '5', '9'].forEach((symbol) => {
-        var btn = document.createElement('button');
-        btn.textContent = 'All ' + symbol;
-        btn.style.margin = '1px';
-        btn.style.fontWeight = 'bold';
-        btn.style.color = LEVEL_COLOR[symbol];
-        btn.addEventListener('click', () => {
-            for (let y = 0; y < h; y++) {
-                var row = rows[y] || '';
-                for (let x = 0; x < w; x++) {
-                    if (!isDisk(row[x])) guess[y][x] = symbol;
-                }
-            }
-            saveGuess(guess);
-            render();
-        });
-        fillRow.appendChild(btn);
-    });
-    paletteEl.appendChild(fillRow);
 
     document.addEventListener('keydown', (e) => {
         var entry = paintKeys.find((p) => p.key === e.key);
